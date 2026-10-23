@@ -451,3 +451,38 @@ export function budgetUnitCost(l: Pick<ShownLine, "qty" | "unit">, price: number
   if (!isTimeUnit(l.unit) && l.qty !== null) return price;
   return budgetQty && budgetQty > 0 ? Math.round((price / budgetQty) * 10000) / 10000 : price;
 }
+
+// ------------------------------------------------------------------ a vendor's portal (migration 126)
+
+/** One of a vendor's bid requests as sc_vendor_portal returns it. */
+export interface PortalBid {
+  token: string | null; current?: boolean; job: string | null; address: string | null;
+  price_by: string | null; pour_date: string | null; sent_at: string | null; opened?: boolean;
+  answered_at: string | null; total: number | null; outcome: "awarded" | "not_chosen" | null; outcome_at: string | null;
+  job_status: string | null; archived: boolean; closed: boolean;
+}
+export type PortalGroup = "open" | "won" | "lost";
+
+/**
+ * Where one of a vendor's bid requests stands, in the vendor's words (Coy, 2026-10-23: "see the other
+ * bid request documents / projects we are trying to win. And they can see the ones they won / lost").
+ * Coy's mark wins; else the job lost, archived or the link turned off is not won; else it is open —
+ * priced and waiting, past its price-by day, or waiting for their price. `today` is yyyy-mm-dd (Central).
+ */
+export function vendorStage(b: PortalBid, today: string): { group: PortalGroup; label: string } {
+  if (b.outcome === "awarded") return { group: "won", label: "You got it" };
+  if (b.outcome === "not_chosen") return { group: "lost", label: "Not chosen this time" };
+  if (b.job_status === "lost" || b.archived) return { group: "lost", label: "The job didn't go ahead" };
+  if (b.closed) return { group: "lost", label: "Closed" };
+  const weWon = ["won", "scheduled", "in_progress", "complete", "closed"].includes(b.job_status ?? "");
+  if (b.answered_at) return { group: "open", label: weWon ? "Priced — we won the job, choosing subs" : "Priced — waiting on the job" };
+  if (b.price_by && b.price_by < today) return { group: "open", label: "Price-by day passed — you can still send it" };
+  return { group: "open", label: "Waiting for your price" };
+}
+
+/** A vendor's requests split into Open · Won · Not won, each newest first as given. */
+export function groupPortalBids(list: PortalBid[], today: string): Record<PortalGroup, Array<PortalBid & { label: string }>> {
+  const out: Record<PortalGroup, Array<PortalBid & { label: string }>> = { open: [], won: [], lost: [] };
+  for (const b of list) { const s = vendorStage(b, today); out[s.group].push({ ...b, label: s.label }); }
+  return out;
+}

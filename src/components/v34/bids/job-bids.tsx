@@ -24,6 +24,8 @@ interface Rec {
   id: string; contact_id: string; name: string; url: string; sent_at: string | null; opened_at: string | null; view_count: number;
   answered_at: string | null; price_total: number | null; price_lines: PriceLine[] | null; answer_note: string | null; revoked_at: string | null;
   sent_via?: string[] | null; last_viewed_at?: string | null;
+  /** Coy's won / lost mark (migration 126), shown on the vendor's portal. */
+  outcome?: "awarded" | "not_chosen" | null; outcome_at?: string | null;
 }
 interface Req { id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[]; created_at: string; edited_at: string | null; packet: EditBid["packet"]; recipients: Rec[] }
 
@@ -71,11 +73,11 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
             </div>
             {[...r.recipients].sort((a, b) => Number(!!b.answered_at) - Number(!!a.answered_at) || (a.price_total ?? Infinity) - (b.price_total ?? Infinity)).map((x) => {
               const total = x.price_total !== null ? Number(x.price_total) : x.price_lines ? lineSum(x.price_lines) : null;
-              const st = x.revoked_at ? "link off" : x.answered_at ? `answered${x.sent_at ? ` in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)}` : ""}`
+              const st = x.outcome === "awarded" ? "✓ awarded" : x.outcome === "not_chosen" ? "not chosen" : x.revoked_at ? "link off" : x.answered_at ? `answered${x.sent_at ? ` in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)}` : ""}`
                 : x.sent_at ? (x.opened_at ? "opened · no price yet" : "sent · not opened") : "not sent";
               return (
                 <div key={x.id} className="flex items-center gap-2 py-1">
-                  <Link href={`/dashboard/vendors/${x.contact_id}`} onClick={(e) => e.stopPropagation()} style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{x.name}</Link>
+                <Link href={`/dashboard/vendors/${x.contact_id}`} onClick={(e) => e.stopPropagation()} style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{x.name}</Link>
                   <span style={{ fontSize: F.xs, color: x.answered_at ? T.green : T.ink3, whiteSpace: "nowrap" }}>{st}</span>
                   <span style={{ ...nums, fontSize: F.sm, fontWeight: 600, width: 96, textAlign: "right", color: total !== null ? T.ink : T.ink3 }}>{total !== null && x.answered_at ? money(total) : "—"}</span>
                 </div>
@@ -126,6 +128,12 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
       }
     } catch (e) { say(x.id, `Text failed: ${e instanceof Error ? e.message : String(e)}`); } finally { setBusy(null); }
   };
+  // Won or not chosen (migration 126) — what their bid requests page shows; a second tap clears it.
+  const mark = async (x: Rec, outcome: "awarded" | "not_chosen" | null) => {
+    setBusy(x.id);
+    try { await call(`/api/bid-requests/recipients/${x.id}`, "PATCH", { outcome }); say(x.id, outcome === "awarded" ? "Marked awarded ✓" : outcome ? "Marked not chosen ✓" : "Mark cleared"); onChanged(); }
+    catch (e) { say(x.id, e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  };
   const mail = (x: Rec, r: Resend) => {
     window.location.assign(`mailto:${encodeURIComponent(r.email ?? "")}?subject=${encodeURIComponent(r.email_parts.subject)}&body=${encodeURIComponent(r.email_parts.body)}`);
     void call(`/api/bid-requests/recipients/${x.id}`, "PATCH", { sent: "email" }).then(() => { say(x.id, "Email opened ✓"); onChanged(); }).catch(() => {});
@@ -164,6 +172,7 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
               {line(x.opened_at ? `Opened ${x.view_count || 1} time${(x.view_count || 1) === 1 ? "" : "s"} · first ${when(x.opened_at)}${x.last_viewed_at && x.view_count > 1 ? ` · last ${when(x.last_viewed_at)}` : ""}` : "Not opened yet")}
               {answeredBeforeEdit(x.answered_at, req.edited_at) && line("Answered before your last edit — their price is for the earlier version.", T.sun)}
               {x.answered_at && line(`Answered ${when(x.answered_at)}${x.sent_at ? ` (in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)})` : ""}${x.answer_note ? ` — “${x.answer_note}”` : ""}`, T.green)}
+              {x.outcome && line(x.outcome === "awarded" ? `✓ Awarded to them ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows they won it.` : `Marked not chosen ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows it went another way.`, x.outcome === "awarded" ? T.green : T.ink3)}
               {r && "error" in r && line(r.error, T.red)}
               {live[x.id] && line(live[x.id], live[x.id].startsWith("Delivered") ? T.green : live[x.id].startsWith("Text failed") || live[x.id].startsWith("Quo took") ? T.red : T.ink)}
               <div className="flex gap-1.5 flex-wrap mt-0.5">
@@ -171,6 +180,8 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
                 {!x.revoked_at && ok?.email && <button onClick={() => mail(x, ok)} style={chip(false)}>Email ↗</button>}
                 <button onClick={() => void navigator.clipboard?.writeText(ok?.url ?? x.url).then(() => say(x.id, "Link copied"))} style={chip(false)}>Copy link</button>
                 <a href={ok?.url ?? x.url} target="_blank" rel="noreferrer" style={{ ...chip(false), display: "inline-flex", alignItems: "center", textDecoration: "none" }}>See their page</a>
+                  <button disabled={busy === x.id} onClick={() => void mark(x, x.outcome === "awarded" ? null : "awarded")} title="Shown on their bid requests page as won" style={chip(x.outcome === "awarded", busy === x.id)}>{x.outcome === "awarded" ? "✓ Awarded" : "Award"}</button>
+                <button disabled={busy === x.id} onClick={() => void mark(x, x.outcome === "not_chosen" ? null : "not_chosen")} title="Shown on their bid requests page as not won" style={chip(false, busy === x.id)}>{x.outcome === "not_chosen" ? "✓ Not chosen" : "Not chosen"}</button>
                 <Link href={`/dashboard/vendors/${x.contact_id}`} style={{ ...chip(false), display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Vendor ›</Link>
               </div>
             </div>

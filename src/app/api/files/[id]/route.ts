@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("show_on_proposal" in b) patch.show_on_proposal = b.show_on_proposal === true;
   // The Plan Room (059): which of a job's files are plans.
   if ("in_plan_room" in b) {
-    if (!f.job_id) return bad("Only a file on a job can go in its plan room.");
+    if (!f.job_id && (b.file_to as { kind?: unknown } | null)?.kind !== "job") return bad("Only a file on a job can go in its plan room.");
     patch.in_plan_room = b.in_plan_room === true;
   }
   if ("section_id" in b) {

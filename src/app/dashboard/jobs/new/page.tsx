@@ -75,6 +75,13 @@ export default function NewJobPage() {
       });
       const id = made.job.id as string;
       if (picked) await j(`/api/jobs/${id}`, "PATCH", { customer_id: picked.id });
+      // Files Dusty was handed with nothing open come onto the job (PDFs into Takeoffs).
+      const fileIds = (new URLSearchParams(window.location.search).get("files") ?? "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 8);
+      for (const fid of fileIds) {
+        const f = await j(`/api/files/${fid}`, "PATCH", { file_to: { kind: "job", id } }).catch(() => null);
+        if (f?.file && /pdf/i.test(`${f.file.mime_type ?? ""} ${f.file.name ?? ""}`)) await j(`/api/files/${fid}`, "PATCH", { in_plan_room: true }).catch(() => null);
+      }
+      if (fileIds.length) { window.dispatchEvent(new Event("sc:spaces-reload")); router.push(`/dashboard/scope/${id}/files`); return; }
       window.dispatchEvent(new Event("sc:spaces-reload"));
       router.push(`/dashboard/scope/${id}/summary`);
     } catch (e) {

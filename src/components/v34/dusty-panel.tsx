@@ -218,6 +218,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   // The Jobs page's emblem (Coy, 2026-10-09): a fresh chat where Dusty asks
   // "a new job, or one you have?" — his question is fixed text, no model call.
   const [jobAsk, setJobAsk] = useState(false);
+  // Files attached with nothing open land unfiled; Dusty asks where they go (Coy, 2026-10-23).
+  const [fileAsk, setFileAsk] = useState<{ id: string; name: string; pdf: boolean }[]>([]);
   // The Contacts page's emblem (Coy, 2026-10-10): an "Add contact" button, no model call.
   const [contactAsk, setContactAsk] = useState(false);
   // The customer page's emblem (Coy, 2026-10-10): Edit · New job · Add to an existing job, no model call.
@@ -421,6 +423,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
         const d = await fetch(`/api/files/${made.file.id}/done`, { method: "POST" });
         if (!d.ok) throw new Error("the upload didn't finish");
         set({ id: made.file.id as string, pct: 100 });
+        if ("from_dusty" in attachTarget()) setFileAsk((x) => [...x, { id: made.file.id as string, name: file.name, pdf: /pdf/i.test(file.type) || /\.pdf$/i.test(file.name) }]);
       } catch (e) { set({ error: e instanceof Error ? e.message : String(e) }); }
     }
   }
@@ -708,6 +711,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
             {/* On a job: what he is reading and how far along (Coy, 2026-10-12). */}
             {planJob && <DustyReading jobId={planJob} onGo={() => { if (!desktop) onClose(); }} />}
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
+            {fileAsk.length > 0 && (
+              <FileAsk files={fileAsk} onDone={() => setFileAsk([])}
+                onNew={() => { const ids = fileAsk.map((f) => f.id).join(","); setFileAsk([]); if (!desktop) onClose(); router.push(`/dashboard/jobs/new?files=${ids}`); }}
+                onFiled={(jobId) => { setFileAsk([]); if (!desktop) onClose(); router.push(`/dashboard/scope/${jobId}/files`); }} />
+            )}
             {!loadingConv && items.length === 0 && jobAsk && (
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
                 onPick={(id) => { setJobAsk(false); router.push(`/dashboard/scope/${id}/summary`); }} />
@@ -925,9 +933,9 @@ function ChatFiles({ files }: { files: TurnFile[] }) {
 
 /** Dusty's question from the Jobs page's emblem: a new job (the New job form)
  *  or one of the jobs there are (opens it, Dusty then on that job). */
-function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => void }) {
+function JobAsk({ onNew, onPick, pickOnly }: { onNew: () => void; onPick: (id: string) => void; pickOnly?: boolean }) {
   const [jobs, setJobs] = useState<{ id: string; title: string | null; city: string | null; contact_name: string | null }[] | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(!!pickOnly);
   const [q, setQ] = useState("");
   useEffect(() => {
     if (!picking || jobs) return;
@@ -939,7 +947,8 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
   const shown = (jobs ?? []).filter((j) => words.every((w) => [j.title, j.city, j.contact_name].filter(Boolean).join(" ").toLowerCase().includes(w))).slice(0, 12);
   const btn: React.CSSProperties = { height: 36, padding: "0 14px", borderRadius: 999, border: `1px solid ${T.hiviz}`, fontFamily: agent, fontSize: F.sm, fontWeight: 600, cursor: "pointer" };
   return (
-    <div style={{ padding: "20px 4px 12px" }}>
+    <div style={{ padding: pickOnly ? "0" : "20px 4px 12px" }}>
+      {!pickOnly && <>
       <div className="flex items-start gap-2.5">
         <DustyEmblem size={30} hidden />
         <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
@@ -950,6 +959,7 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
         <button onClick={onNew} style={{ ...btn, background: T.hiviz, color: T.onHiviz }}>A new job</button>
         <button onClick={() => setPicking(true)} style={{ ...btn, background: picking ? T.hivizDim : T.card, color: T.ink }}>Edit an existing one</button>
       </div>
+      </>}
       {picking && (
         <div style={{ margin: "12px 0 0 40px" }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Which job? Name, customer, city…" autoFocus
@@ -967,6 +977,43 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Files attached with no job, person or customer open: Dusty asks where they go — a new job (with a new
+ *  customer if need be, on the New job page) or a job there is. Fixed words, no model call. */
+function FileAsk({ files, onNew, onFiled, onDone }: { files: { id: string; name: string; pdf: boolean }[]; onNew: () => void; onFiled: (jobId: string) => void; onDone: () => void }) {
+  const [picking, setPicking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const btn: React.CSSProperties = { height: 36, padding: "0 14px", borderRadius: 999, border: `1px solid ${T.hiviz}`, fontFamily: agent, fontSize: F.sm, fontWeight: 600, cursor: "pointer" };
+  const what = files.length === 1 ? files[0].name : `these ${files.length} files`;
+  async function fileOn(jobId: string) {
+    setErr(null);
+    try {
+      for (const f of files) {
+        const r = await fetch(`/api/files/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_to: { kind: "job", id: jobId }, ...(f.pdf ? { in_plan_room: true } : {}) }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `HTTP ${r.status}`);
+      }
+      onFiled(jobId);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  }
+  return (
+    <div style={{ padding: "16px 4px 12px" }}>
+      <div className="flex items-start gap-2.5">
+        <DustyEmblem size={30} hidden />
+        <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
+          Got {what}. What should I do with it?
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" style={{ margin: "12px 0 0 40px" }}>
+        <button onClick={onNew} style={{ ...btn, background: T.hiviz, color: T.onHiviz }}>New job (and customer)</button>
+        <button onClick={() => setPicking(true)} style={{ ...btn, background: picking ? T.hivizDim : T.card, color: T.ink }}>Put it on a job</button>
+        <button onClick={onDone} style={{ ...btn, background: T.card, color: T.ink3, borderColor: T.hair }}>Just ask about it</button>
+      </div>
+      {err && <div style={{ margin: "8px 0 0 40px", fontFamily: agent, fontSize: F.xs, color: T.red }}>{err}</div>}
+      {picking && <div style={{ marginLeft: 36 }}><JobAsk pickOnly onNew={onNew} onPick={(id) => void fileOn(id)} /></div>}
     </div>
   );
 }

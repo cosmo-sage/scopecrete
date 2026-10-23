@@ -937,6 +937,7 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   (Coy, later) is one module.
 - **Texted photos are in the same list** ("From texts") — `message_media`,
   copied in lazily by the thread's media route as before.
+- **Dusty asks where an unfiled file goes (Coy, 2026-10-23: "Dusty should ask him what to do with it and give him the option to create a new customer and/or job").** A file attached in Dusty's chat with no job, person or customer open is saved unfiled as before, and Dusty asks (fixed words, `FileAsk` in `dusty-panel.tsx`): **New job (and customer)** opens the New job page with `?files=`, which files them on the job it makes (PDFs into Takeoffs) and opens its Files; **Put it on a job** picks one (`PATCH /api/files/[id] {file_to, in_plan_room}`, the plan-room switch now allowed in the same move); **Just ask about it** leaves them unfiled. No migration.
 - **A refused upload says why (2026-10-23, Jeremy's 56 MB bid set refused three times from a phone).** Storage refuses a file past the project's upload limit (50 MB by default, raised in Supabase → Project Settings → Storage → Upload file size limit). `sendBytes()` (`files-panel.tsx`), which every upload uses, now says the file's size and that the limit must be raised, or that the connection dropped, instead of "upload failed (400)".
 - **Dusty reads them in the background** — edge function `read-files`,
   pg_cron every minute, claim `sc_files_claim` (service role), the enricher's

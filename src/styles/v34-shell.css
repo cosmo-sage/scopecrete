@@ -1087,3 +1087,6 @@ html[data-nav="spaces"][data-head-hide] .sc-head-wrap { transform: none; }
   .sc-ticker-track { animation: none; }
   .sc-ticker-run[aria-hidden="true"] { display: none; }
 }
+/* The proposal builder shows one page at a time; Print / PDF draws every page from a copy made only for printing. */
+.sc-print-block { display: none; }
+@media print { .sc-print-block { display: block; } }

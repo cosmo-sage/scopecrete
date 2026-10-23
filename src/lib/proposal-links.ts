@@ -7,6 +7,7 @@
  * phone or mail app through an sms: or mailto: link, written here.
  */
 import { cleanCover } from "./proposal.ts";
+import { cleanIfFind, cleanPages, withoutNew, type ProposalPage } from "./proposal-pages.ts";
 
 export interface LinkAssets {
   /** Every storage path the link may show — the anon storage policy reads this list. */
@@ -18,6 +19,19 @@ export interface LinkAssets {
   maps?: Record<string, string>;
   /** area id → its photos. */
   photos?: Record<string, string[]>;
+  /** file id → its path, for the photos and PDFs the owner put on pages of their own (Proposal Builder v2). */
+  files?: Record<string, string>;
+}
+
+/** The job file ids the proposal's own pages name — photos pages and PDF pages that are on. */
+export function pageFileIds(pages: ProposalPage[] | undefined): string[] {
+  const ids = new Set<string>();
+  for (const p of pages ?? []) {
+    if (p.off) continue;
+    if (p.kind === "photos") for (const ph of p.photos ?? []) ids.add(ph.id);
+    if (p.kind === "pdf" && p.file) ids.add(p.file);
+  }
+  return [...ids].slice(0, 120);
 }
 
 /** The assets object from what the link shows; paths outside the org's own folder are left out. */
@@ -27,11 +41,13 @@ export function linkAssets(orgId: string, a: Omit<LinkAssets, "paths">): LinkAss
   for (const [k, v] of Object.entries(a.maps ?? {})) if (mine(v)) maps[k] = v;
   const photos: Record<string, string[]> = {};
   for (const [k, v] of Object.entries(a.photos ?? {})) { const ok = v.filter(mine).slice(0, 4); if (ok.length) photos[k] = ok; }
+  const files: Record<string, string> = {};
+  for (const [k, v] of Object.entries(a.files ?? {})) if (mine(v)) files[k] = v;
   const out: LinkAssets = {
     paths: [], logo: mine(a.logo) ? a.logo : null, logo_dark: mine(a.logo_dark) ? a.logo_dark : null,
-    cover: mine(a.cover) ? a.cover : null, maps, photos,
+    cover: mine(a.cover) ? a.cover : null, maps, photos, ...(Object.keys(files).length ? { files } : {}),
   };
-  out.paths = [...new Set([out.logo, out.logo_dark, out.cover, ...Object.values(maps), ...Object.values(photos).flat()].filter(mine))];
+  out.paths = [...new Set([out.logo, out.logo_dark, out.cover, ...Object.values(maps), ...Object.values(photos).flat(), ...Object.values(files)].filter(mine))];
   return out;
 }
 
@@ -120,7 +136,7 @@ const pick = (r: unknown, keys: string[]): Rec | null => {
  * its name), never a hidden price (its number is zeroed; the page shows "—"),
  * never the areas' notes (each area's scope of work, written for them, goes as `scope`). The snapshot itself stays in the org.
  */
-export function publicSnapshot(snap: Rec, extra: { project_type: string | null; type_label: string }): Rec {
+export function publicSnapshot(snap: Rec, extra: { project_type: string | null; type_label: string; cover_stamp?: string | null }): Rec {
   const price = (snap.price ?? {}) as Rec;
   const display = (snap.display ?? {}) as Rec;
   const groups = Array.isArray(price.groups) ? (price.groups as Rec[]) : [];
@@ -154,7 +170,12 @@ export function publicSnapshot(snap: Rec, extra: { project_type: string | null; 
       preliminary: !!display.preliminary,
       // The cover's look (style, colours, the owner's own words) — nothing of the price.
       ...(cleanCover(display.cover) ? { cover: cleanCover(display.cover) } : {}),
+      // The pages the owner arranged (Proposal Builder v2): switched-off ones stay in the org.
+      ...(cleanPages(display.pages) ? { pages: cleanPages(display.pages)!.filter((p) => !p.off).map(withoutNew) } : {}),
+      ...(cleanIfFind(display.ifind).length ? { ifind: cleanIfFind(display.ifind) } : {}),
+      ...(s(display.valid_until) ? { valid_until: s(display.valid_until) } : {}),
     },
+    cover_stamp: s(extra.cover_stamp),
     draws: Array.isArray(snap.draws) ? (snap.draws as Rec[]).map((d) => ({ pct: n(d.pct), amt: n(d.amt), when: s(d.when) ?? "" })) : [],
     scope_intro: s(snap.scope_intro),
     warranty_text: pick(snap.warranty_text, ["title", "body"]),

@@ -90,11 +90,11 @@ export async function preparerOf(sb: Sb): Promise<{ name: string | null; phone: 
 /** Everything the proposal page reads, in one go. */
 /** `create: false` (Dusty) never makes a draft — he only reads. */
 export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts: { create?: boolean } = {}) {
-  const { data: job } = await sb.from("jobs").select("id, job_number, title, status, address, city, state, zip, description, job_type, contact_id, customer_id, duration_days")
+  const { data: job } = await sb.from("jobs").select("id, job_number, title, status, address, city, state, zip, description, job_type, contact_id, customer_id, duration_days, scheduled_start")
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return null;
   const est = await workingEstimate(sb, orgId, jobId, opts.create !== false);
-  const [draft, { data: finals }, { data: optRows }, { data: lines }, { data: secs }, pricing, takeoff, org, { data: types }, { data: templates }, customer, contact, { data: photos }] = await Promise.all([
+  const [draft, { data: finals }, { data: optRows }, { data: lines }, { data: secs }, pricing, takeoff, org, { data: types }, { data: templates }, customer, contact, { data: photos }, { data: pdfs }] = await Promise.all([
     draftFor(sb, orgId, jobId, (job.job_type as string | null) ?? null, opts.create !== false),
     sb.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", jobId).eq("status", "final").is("deleted_at", null).order("version", { ascending: false }),
     Promise.resolve({ data: [] as Array<{ id: string; label: string }> }), /* one price per job — options not read (2026-10-05) */
@@ -107,7 +107,9 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     sb.from("doc_templates").select(TEMPLATE_COLS).eq("org_id", orgId).order("kind").order("name"),
     job.customer_id ? sb.from("customers").select("id, name, address_formatted, address_line1, city, state, zip").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle().then((r: { data: unknown }) => r.data as Record<string, unknown> | null) : Promise.resolve(null),
     job.contact_id ? contactWithEmail(sb, orgId, job.contact_id as string) : Promise.resolve(null),
-    sb.from("files").select("id, name, storage_path, fetch_state").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
+    sb.from("files").select("id, name, storage_path, fetch_state, taken_at, lat, lng, created_at").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(80),
+    // PDFs the proposal can carry as pages of their own (Proposal Builder v2).
+    sb.from("files").select("id, name, storage_path, fetch_state, category, byte_size").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "pdf").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
   ]);
   const p = pricing.get(jobId);
   const [preparer, numbers] = await Promise.all([preparerOf(sb), proposalNumbers(sb, orgId)]);
@@ -127,7 +129,10 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     templates: templates ?? [],
     customer, contact, preparer,
     photos: ((await signFiles(sb, (photos ?? []) as Array<Record<string, unknown>>)) as Array<Record<string, unknown>>)
-      .map((f) => ({ id: f.id as string, name: (f.name as string | null) ?? null, url: (f.url as string | null) ?? null })),
+      .map((f) => ({ id: f.id as string, name: (f.name as string | null) ?? null, url: (f.url as string | null) ?? null,
+        taken_at: (f.taken_at as string | null) ?? (f.created_at as string | null) ?? null, lat: num(f.lat), lng: num(f.lng) })),
+    pdfs: ((await signFiles(sb, (pdfs ?? []) as Array<Record<string, unknown>>)) as Array<Record<string, unknown>>)
+      .map((f) => ({ id: f.id as string, name: (f.name as string | null) ?? null, url: (f.url as string | null) ?? null, category: (f.category as string | null) ?? null, bytes: num(f.byte_size) })),
   };
 }
 

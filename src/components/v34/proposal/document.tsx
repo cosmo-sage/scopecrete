@@ -16,6 +16,8 @@ import { AreaMap, type AreaVisual } from "./area-visuals";
 import { ScopeBullets } from "../scope-of-work";
 import { DustyEmblem } from "../dusty-avatar";
 import { CoverPage, CoverControls } from "./cover-page";
+import { GlancePage, IfFindPage, TextBody, TextEditor, PhotosPage, PdfPage, type DocFile } from "./pages-render";
+import { pagesOf, patchPage, validLabel, BUILT, type ProposalPage } from "@/lib/proposal-pages";
 import { coverOf, proposalFileName, drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
@@ -54,6 +56,12 @@ export interface DocVM {
   /** The add-ons the customer ticked on the link (099), held by the page so they reach the
    *  signature. Without `set` they are locked — what was signed for. */
   addonPick?: { ids: string[]; set?: (ids: string[]) => void } | null;
+  /** Photos and PDFs the pages name, by file id (signed links). */
+  files?: Record<string, DocFile>;
+  /** The cover photo's camera stamp — when and where it was taken. */
+  coverStamp?: string | null;
+  /** When the work starts, for At a glance ("Mon, Nov 3"), else null. */
+  startLabel?: string | null;
 }
 export interface DocEdits {
   display: (d: ProposalDisplay) => void;
@@ -62,10 +70,16 @@ export interface DocEdits {
   warranty: (w: { title: string; body: string }) => void;
   terms: (c: Clause[]) => void;
   saveTemplate: (kind: "warranty" | "terms") => void;
-  dusty: (kind: "warranty" | "terms" | "scope" | "area", areaId?: string) => void;
+  dusty: (kind: "warranty" | "terms" | "scope" | "area" | "page", areaId?: string) => void;
   pickCover: () => void;
   /** Edits an area's scope of work — saved on the section, so the budget shows it too (Coy, 2026-10-10). */
   scope?: (sectionId: string, text: string | null) => void;
+  /** If we find…: pick a Price book item to add. */
+  addIfFind?: () => void;
+  /** A photos page: pick the job's photos to add. */
+  addPhotos?: (pageId: string) => void;
+  /** A PDF page: pick the job's PDF. */
+  pickPdf?: (pageId: string) => void;
 }
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -132,7 +146,8 @@ function Section({ k, label, off, onToggle, children, page, narrow }: { k: strin
   );
 }
 
-export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; narrow: boolean }) {
+/** `only`: the builder's editor — just that page, drawn even when switched off. */
+export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits: DocEdits | null; narrow: boolean; only?: string }) {
   const d = vm.display;
   const off = d.off ?? {};
   const setD = (patch: Partial<ProposalDisplay>) => edits?.display({ ...d, ...patch });
@@ -163,73 +178,82 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   const dateStr = new Date(vm.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   // A photo opens full screen over the page, never in a new window (Coy, 2026-10-10).
   const [viewer, setViewer] = useState<{ photos: Photo[]; i: number } | null>(null);
+  const pages = pagesOf(d);
+  const setPages = (next: ProposalPage[]) => setD({ pages: next });
+  const pageToggle = (p: ProposalPage) => (edits ? (on: boolean) => setPages(patchPage(pages, p.id, { off: on ? undefined : true })) : undefined);
+  // A page's heading: the owner's name for it when renamed, else the document's own word.
+  const lab = (p: ProposalPage, fallback: string) => (p.label && p.label !== BUILT.find((b) => b.kind === p.kind)?.label ? p.label : fallback);
   const shownPhotos = (id: string) => (d.hide_area_pics || d.picsOff?.[id] ? [] : vm.visuals?.[id]?.photos ?? []);
 
-  return (
-    <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
-      <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
-        {/* A full sheet (Field or Pour) drawn from the job, or the old photo strip (Coy, 2026-10-22). */}
-        {cover.style !== "strip" && <CoverPage vm={vm} edits={edits} kind={kind} dateStr={dateStr} />}
-        {cover.style === "strip" && edits && <CoverControls c={cover} set={(patch) => setD({ cover: { ...cover, ...patch } })} pickCover={edits.pickCover} hasPhoto={!!vm.coverUrl} />}
-        {cover.style === "strip" && (vm.coverUrl || edits) && <div className={vm.coverUrl ? "sc-doc-cover" : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? "#2A2A2A" : "#E9E4DA", overflow: "hidden" }}>
-          {/* An <img>, not a CSS background: browsers leave backgrounds out of a print unless asked. */}
-          {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
-          {vm.coverUrl && <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-          {!vm.coverUrl && (
-            <button type="button" onClick={edits ? edits.pickCover : undefined} className="sc-no-print absolute inset-0 flex items-center justify-center" disabled={!edits}
-              style={{ color: "#8C8578", fontFamily: disp, fontSize: 13, letterSpacing: ".1em", textTransform: "uppercase", border: 0, background: "transparent", cursor: edits ? "pointer" : "default" }}>
-              {edits ? "+ Pick a cover photo from the job's files" : "No cover photo"}
-            </button>
-          )}
-          {vm.coverUrl && edits && (
-            <button type="button" onClick={edits.pickCover} className="sc-no-print absolute" style={{ left: 10, top: 10, background: "rgba(251,246,236,.94)", border: "1px solid #E6DCC8", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Change photo</button>
-          )}
-        </div>}
-      </Section>
+  // Each page's body. The title page is the cover, the dark band and the header together.
+  const bodies: Record<string, (p: ProposalPage) => React.ReactNode> = {
+    title: () => (
+      <>
+        <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
+          {/* A full sheet (Field or Pour) drawn from the job, or the old photo strip (Coy, 2026-10-22). */}
+          {cover.style !== "strip" && <CoverPage vm={vm} edits={edits} kind={kind} dateStr={dateStr} />}
+          {cover.style === "strip" && edits && <CoverControls c={cover} set={(patch) => setD({ cover: { ...cover, ...patch } })} pickCover={edits.pickCover} hasPhoto={!!vm.coverUrl} />}
+          {cover.style === "strip" && (vm.coverUrl || edits) && <div className={vm.coverUrl ? "sc-doc-cover" : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? "#2A2A2A" : "#E9E4DA", overflow: "hidden", containerType: "inline-size" }}>
+            {/* An <img>, not a CSS background: browsers leave backgrounds out of a print unless asked. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
+            {vm.coverUrl && <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+            {vm.coverUrl && cover.stamp && vm.coverStamp && <CameraStamp text={vm.coverStamp} />}
+            {!vm.coverUrl && (
+              <button type="button" onClick={edits ? edits.pickCover : undefined} className="sc-no-print absolute inset-0 flex items-center justify-center" disabled={!edits}
+                style={{ color: "#8C8578", fontFamily: disp, fontSize: 13, letterSpacing: ".1em", textTransform: "uppercase", border: 0, background: "transparent", cursor: edits ? "pointer" : "default" }}>
+                {edits ? "+ Pick a cover photo from the job's files" : "No cover photo"}
+              </button>
+            )}
+            {vm.coverUrl && edits && (
+              <button type="button" onClick={edits.pickCover} className="sc-no-print absolute" style={{ left: 10, top: 10, background: "rgba(251,246,236,.94)", border: "1px solid #E6DCC8", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Change photo</button>
+            )}
+          </div>}
+        </Section>
 
-      {/* The dark band: the logo on the left, what it is on the right. Its own strip since 2026-10-05
-          (Coy: "The cover should not include this dark header. I don't want to lose this when I turn the
-          header off") — the Cover switch hides only the photo, the Header switch only what is below. */}
-      <div data-band className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
-        {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
-          : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
-        <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
-          <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
-          <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 17 : 20, lineHeight: 1.2 }}>{vm.job.title || "Concrete work"}</div>
-        </div>
-      </div>
-
-      <Section k="header" label="Header" off={!!off.header} onToggle={sectionToggle("header")} narrow={narrow}>
-        <div style={pad ? { padding: pad } : undefined}>
-          <div className={narrow ? "flex flex-col gap-2" : "flex items-start gap-3"}>
-            {/* The logo is on the dark band above, always — Coy: "redundant" here. */}
-            <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }} />
-            <div style={{ textAlign: narrow ? "left" : "right", paddingRight: edits && !narrow ? 90 : 0 }}>
-              <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
-              <div style={{ fontSize: 11.5, color: "#5E5A52" }}>Issued {dateStr} · valid 30 days</div>
-            </div>
-          </div>
-          <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", fontSize: 11.5 }}>
-            <div>
-              <div style={{ ...kicker, color: "#8C8578" }}>Prepared by</div>
-              <div style={{ fontWeight: 600 }}>{vm.preparedBy?.name ?? vm.org.name}</div>
-              {vm.preparedBy?.name && vm.org.name && <div>{vm.org.name}</div>}
-              {vm.preparedBy?.phone && <div>{formatPhone(vm.preparedBy.phone)}</div>}
-              {vm.preparedBy?.email && <div>{vm.preparedBy.email}</div>}
-            </div>
-            <div>
-              <div style={{ ...kicker, color: "#8C8578" }}>Prepared for</div>
-              <div style={{ fontWeight: 600 }}>{custName}</div>
-              {where && <div>{where}</div>}
-              {vm.customer.phone && <div>{formatPhone(vm.customer.phone)}</div>}
-              {vm.customer.email && <div>{vm.customer.email}</div>}
-            </div>
+        {/* The dark band: the logo on the left, what it is on the right. Its own strip since 2026-10-05
+            (Coy: "The cover should not include this dark header. I don't want to lose this when I turn the
+            header off") — the Cover switch hides only the photo, the Header switch only what is below. */}
+        <div data-band className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
+          {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
+            : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
+          <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
+            <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
+            <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 17 : 20, lineHeight: 1.2 }}>{vm.job.title || "Concrete work"}</div>
           </div>
         </div>
-      </Section>
 
-      <Section k="scope" label="Scope" off={!!off.scope} onToggle={sectionToggle("scope")} narrow={narrow}>
+        <Section k="header" label="Header" off={!!off.header} onToggle={sectionToggle("header")} narrow={narrow}>
+          <div style={pad ? { padding: pad } : undefined}>
+            <div className={narrow ? "flex flex-col gap-2" : "flex items-start gap-3"}>
+              {/* The logo is on the dark band above, always — Coy: "redundant" here. */}
+              <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }} />
+              <div style={{ textAlign: narrow ? "left" : "right", paddingRight: edits && !narrow ? 90 : 0 }}>
+                <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
+                <div style={{ fontSize: 11.5, color: "#5E5A52" }}>Issued {dateStr} · {validLabel(d.valid_until) ? `valid until ${validLabel(d.valid_until)}` : "valid 30 days"}</div>
+              </div>
+            </div>
+            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", fontSize: 11.5 }}>
+              <div>
+                <div style={{ ...kicker, color: "#8C8578" }}>Prepared by</div>
+                <div style={{ fontWeight: 600 }}>{vm.preparedBy?.name ?? vm.org.name}</div>
+                {vm.preparedBy?.name && vm.org.name && <div>{vm.org.name}</div>}
+                {vm.preparedBy?.phone && <div>{formatPhone(vm.preparedBy.phone)}</div>}
+                {vm.preparedBy?.email && <div>{vm.preparedBy.email}</div>}
+              </div>
+              <div>
+                <div style={{ ...kicker, color: "#8C8578" }}>Prepared for</div>
+                <div style={{ fontWeight: 600 }}>{custName}</div>
+                {where && <div>{where}</div>}
+                {vm.customer.phone && <div>{formatPhone(vm.customer.phone)}</div>}
+                {vm.customer.email && <div>{vm.customer.email}</div>}
+              </div>
+            </div>
+          </div>
+        </Section>
+      </>
+    ),
+    scope: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           {/* The job's own address, above the scope (Coy, 2026-10-12: "a job Information Line above Scope of Work"). */}
           {vm.job.address && (
@@ -238,7 +262,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
               <span style={{ fontSize: 13 }}><span style={{ color: "#5E5A52" }}>Job site: </span><b style={{ fontWeight: 600 }}>{vm.job.address}</b></span>
             </div>
           )}
-          <div style={kicker}>Scope of work</div>
+          <div style={kicker}>{lab(p, "Scope of work")}</div>
           <h2 style={h2}>{vm.job.title || "The work"}</h2>
           <div className="flex items-start gap-1.5">
             <div className="flex-1 min-w-0">
@@ -295,12 +319,11 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             </div>
           )}
         </div>
-      </Section>
-
-      <Section k="pricing" label="Pricing" off={!!off.pricing} onToggle={sectionToggle("pricing")} narrow={narrow}>
+    ),
+    pricing: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           <div className="flex items-center gap-2 flex-wrap" style={{ paddingRight: edits ? 90 : 0 }}>
-            <div style={kicker}>Pricing</div>
+            <div style={kicker}>{lab(p, "Pricing")}</div>
             <span className="flex-1" />
           </div>
           {prelim && (
@@ -330,18 +353,16 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} photosOf={shownPhotos} onPhoto={(photos, i) => setViewer({ photos, i })} />
           )}
         </div>
-      </Section>
-
-      <Section k="pay" label="Payments" off={!!off.pay} onToggle={sectionToggle("pay")} narrow={narrow}>
+    ),
+    pay: () => (
         <div style={pad ? { padding: pad } : undefined}>
           <Payments vm={vm} edits={edits} narrow={narrow} />
         </div>
-      </Section>
-
-      <Section k="warranty" label="Warranty" off={!!off.warranty} onToggle={sectionToggle("warranty")} narrow={narrow}>
+    ),
+    warranty: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           <div className="flex items-center gap-2 flex-wrap" style={{ paddingRight: edits ? 100 : 0 }}>
-            <div style={kicker}>Warranty</div>
+            <div style={kicker}>{lab(p, "Warranty")}</div>
             <TemplateTag name={vm.warranty.template} starter={vm.warranty.starter} edited={vm.warranty.edited} />
           </div>
           <Grow label="Warranty title" readOnly={!edits} value={vm.warranty.title} onChange={(v) => edits?.warranty({ title: v, body: vm.warranty.body })} style={{ ...h2, marginTop: 4 }} />
@@ -354,12 +375,11 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             </div>
           )}
         </div>
-      </Section>
-
-      <Section k="terms" label="Terms" off={!!off.terms} onToggle={sectionToggle("terms")} narrow={narrow}>
+    ),
+    terms: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           <div className="flex items-center gap-2 flex-wrap" style={{ paddingRight: edits ? 90 : 0 }}>
-            <div style={kicker}>Terms &amp; conditions</div>
+            <div style={kicker}>{lab(p, "Terms & conditions")}</div>
             <TemplateTag name={vm.terms.template} starter={vm.terms.starter} edited={vm.terms.edited} />
           </div>
           <h2 style={{ ...h2, marginTop: 4 }}>{vm.terms.title}</h2>
@@ -387,11 +407,10 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             </div>
           )}
         </div>
-      </Section>
-
-      <Section k="sign" label="Sign" off={!!off.sign} onToggle={sectionToggle("sign")} narrow={narrow}>
+    ),
+    sign: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
-          <div style={kicker}>Acceptance</div>
+          <div style={kicker}>{lab(p, "Acceptance")}</div>
           <p style={{ fontSize: 12.5, margin: "6px 0 18px" }}>
             The prices, scope, payment schedule and terms above are accepted. {vm.org.name} is authorized to do the work as described.
           </p>
@@ -415,13 +434,50 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             })}
           </div>
         </div>
-      </Section>
+    ),
+    glance: (p) => <GlancePage title={lab(p, "At a glance")} total={vm.priced.ok && !vm.choices ? vm.priced.total : null} draws={vm.draws}
+      areas={vm.areas.map((a) => a.name || a.work_type || "Area")} start={vm.startLabel ?? null} display={d} setD={edits ? setD : null} />,
+    ifind: (p) => <IfFindPage title={lab(p, "If we find…")} lines={d.ifind ?? []} setD={edits ? setD : null} onAdd={edits?.addIfFind} />,
+    text: (p) => (
+      <>
+        {p.label && <h2 style={{ ...h2, fontFamily: strong, fontWeight: 700, fontSize: 20 }}>{p.label}</h2>}
+        {edits ? <TextEditor body={p.body ?? ""} onChange={(s) => setPages(patchPage(pages, p.id, { body: s }))} onDusty={() => edits.dusty("page", p.id)} /> : <TextBody body={p.body} />}
+      </>
+    ),
+    photos: (p) => {
+      const files = vm.files ?? {};
+      const list = (p.photos ?? []).filter((f) => files[f.id]).map((f) => ({ id: f.id, name: f.caption || files[f.id].name, url: files[f.id].url }));
+      return <PhotosPage page={p} title={p.label || "Photos"} files={files} pages={pages} setD={edits ? setD : null}
+        onAdd={edits?.addPhotos ? () => edits.addPhotos!(p.id) : undefined} onOpen={(i) => setViewer({ photos: list, i })} />;
+    },
+    pdf: (p) => <PdfPage page={p} title={p.label || "Attached document"} file={p.file ? vm.files?.[p.file] ?? null : null} pages={pages}
+      setD={edits ? setD : null} onPick={edits?.pickPdf ? () => edits.pickPdf!(p.id) : undefined} />,
+  };
+  // In the builder one page is drawn at a time, switched off or not; otherwise every page in order,
+  // the off ones left out (or, when editing, a dashed line to bring each back).
+  const shown = only ? pages.filter((p) => p.id === only) : pages;
+  return (
+    <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
+      {shown.map((p) => {
+        const body = bodies[p.kind]?.(p);
+        if (only) return <div key={p.id} data-page={p.id} style={{ opacity: p.off ? 0.55 : 1 }}>{p.kind === "title" ? body : <Section k={p.kind} label={p.label} off={false} narrow={narrow}>{body}</Section>}</div>;
+        if (p.kind === "title") {
+          if (p.off) return edits ? <Section key={p.id} k="title" label={p.label || "Title"} off onToggle={pageToggle(p)}>{null}</Section> : null;
+          return <React.Fragment key={p.id}>{body}</React.Fragment>;
+        }
+        return <Section key={p.id} k={p.kind} label={p.label || "Page"} off={!!p.off} onToggle={pageToggle(p)} narrow={narrow} page={p.kind === "pdf" && !edits}>{body}</Section>;
+      })}
       {viewer && <PhotoViewer photos={viewer.photos} start={viewer.i} onClose={() => setViewer(null)} />}
     </div>
   );
 }
 
 /** A row of square thumbnails — one line, scrolling sideways when there are more than fit; a tap opens one. */
+/** The cover photo's camera stamp, bottom right — when and where it was taken. */
+export function CameraStamp({ text }: { text: string }) {
+  return <span style={{ position: "absolute", right: "2cqw", bottom: "1.6cqw", fontSize: "max(9px, 1.4cqw)", color: "rgba(255,255,255,.85)", textShadow: "0 1px 2px rgba(0,0,0,.6)", fontFamily: "ui-monospace, monospace", pointerEvents: "none" }}>{text}</span>;
+}
+
 function Thumbs({ photos, size, max, onOpen }: { photos: Photo[]; size: number; max?: number; onOpen: (i: number) => void }) {
   const list = max ? photos.slice(0, max) : photos;
   const more = photos.length - list.length;

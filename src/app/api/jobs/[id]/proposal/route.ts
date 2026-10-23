@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { jobInOrg, workingEstimate } from "@/lib/budget-server";
 import { PROPOSAL_COLS, TYPE_COLS, proposalBundle, typeDefaults, typeRow } from "@/lib/proposal-server";
 import { cleanCover } from "@/lib/proposal";
+import { cleanIfFind, cleanPages } from "@/lib/proposal-pages";
 
 /**
  * The job's proposal (migration 060; design/proposal). GET opens the draft —
@@ -72,6 +73,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       picsOff: flags(d.picsOff, idKey) ?? {}, hide_area_pics: d.hide_area_pics === true, all_options: d.all_options === true,
       preliminary: d.preliminary === true,
       ...(cleanCover(d.cover) ? { cover: cleanCover(d.cover) } : {}),
+      ...(cleanPages(d.pages) ? { pages: cleanPages(d.pages) } : {}),
+      ...(cleanIfFind(d.ifind).length ? { ifind: cleanIfFind(d.ifind) } : {}),
+      ...(typeof d.valid_until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.valid_until) ? { valid_until: d.valid_until } : {}),
     };
   }
   // One line in or out of the add-ons, from the budget page (it doesn't hold the whole display).

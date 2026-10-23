@@ -22,7 +22,7 @@ interface Shown {
   warranty_text: { title?: string; body?: string } | null; terms_text: { title: string | null; clauses: Array<{ h: string; b: string }> };
   sections: Rec[]; price: ProposalPrice; choices: DocVM["choices"];
 }
-interface Urls { logo: string | null; logo_dark: string | null; cover: string | null; maps: Record<string, string>; photos: Record<string, string[]> }
+interface Urls { logo: string | null; logo_dark: string | null; cover: string | null; maps: Record<string, string>; photos: Record<string, string[]>; files?: Record<string, { url: string; name: string }> }
 
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: v % 1 ? 2 : 0 });
 const s = (v: unknown) => (typeof v === "string" && v ? v : null);
@@ -52,6 +52,7 @@ export function vmFromShown(sh: Shown, urls: Urls): DocVM {
     },
     job: { title: s(sh.job?.title), address: s(sh.job?.address), description: null },
     coverUrl: urls.cover, scopeIntro: sh.scope_intro, areas, visuals,
+    files: urls.files ?? {}, coverStamp: s((sh as { cover_stamp?: unknown }).cover_stamp),
     priced: sh.price, choices: sh.choices ?? null, display: sh.display, draws: sh.draws,
     check: sh.price.ok ? drawsCheck(sh.draws, sh.price.total) : null,
     warranty: { title: sh.warranty_text?.title ?? "", body: sh.warranty_text?.body ?? "", template: null, starter: false, edited: false },

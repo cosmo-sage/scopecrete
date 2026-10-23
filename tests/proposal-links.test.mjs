@@ -81,3 +81,22 @@ test("a text or email names the proposal links it carries", () => {
   assert.deepEqual(linkTokensIn(`/p/${u}\n/p/${"c".repeat(33)}`), [u]);
   assert.deepEqual(linkTokensIn("no link here, /p/short"), []);
 });
+
+test("the owner's own pages reach the customer's copy, switched-off ones don't, and their files are signed", async () => {
+  const { pageFileIds } = await import("../src/lib/proposal-links.ts");
+  const pages = [
+    { id: "p1", kind: "title", label: "Title" },
+    { id: "p2", kind: "photos", label: "Site", photos: [{ id: "f1" }, { id: "f2" }] },
+    { id: "p3", kind: "pdf", label: "Plans", file: "f3" },
+    { id: "p4", kind: "pdf", label: "Hidden", file: "f4", off: true },
+  ];
+  assert.deepEqual(pageFileIds(pages), ["f1", "f2", "f3"]);
+  const shown = publicSnapshot({ display: { pages, ifind: [{ id: "i1", name: "Soft spot", unit: "SY", sell: 18 }], valid_until: "2026-11-30" }, price: { ok: false } }, { project_type: null, type_label: "", cover_stamp: "Oct 2 · 30.45, -91.18" });
+  assert.deepEqual(shown.display.pages.map((p) => p.id), ["p1", "p2", "p3"]);
+  assert.equal(shown.display.ifind[0].sell, 18);
+  assert.equal(shown.display.valid_until, "2026-11-30");
+  assert.equal(shown.cover_stamp, "Oct 2 · 30.45, -91.18");
+  const a = linkAssets("org1", { files: { f1: "org1/x/a.jpg", f9: "org2/x/b.jpg" } });
+  assert.deepEqual(a.files, { f1: "org1/x/a.jpg" });
+  assert.ok(a.paths.includes("org1/x/a.jpg") && !a.paths.includes("org2/x/b.jpg"));
+});

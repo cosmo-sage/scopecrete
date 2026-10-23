@@ -23,8 +23,15 @@ const BODY = "var(--site-body), 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-s
 /** The job photo, or with none a quiet hatched field in the sheet's dark colour (and a pick button while editing). */
 function Photo({ vm, edits, dark }: { vm: DocVM; edits: DocEdits | null; dark: string }) {
   if (vm.coverUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- signed link, printed
-    return <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />;
+    const stamp = coverOf(vm.display).stamp && vm.coverStamp ? vm.coverStamp : null;
+    return (
+      <>
+        {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
+        <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        {/* The camera stamp, bottom right — when and where it was taken (Proposal Builder v2). */}
+        {stamp && <span style={{ position: "absolute", right: "2cqw", bottom: "1.6cqw", fontSize: "max(9px, 1.4cqw)", color: "rgba(255,255,255,.85)", textShadow: "0 1px 2px rgba(0,0,0,.6)", fontFamily: "ui-monospace, monospace", pointerEvents: "none" }}>{stamp}</span>}
+      </>
+    );
   }
   return (
     <div style={{ position: "absolute", inset: 0, background: `repeating-linear-gradient(135deg, ${dark} 0 1.6cqw, color-mix(in srgb, ${dark} 86%, #fff) 1.6cqw 1.9cqw)` }}>
@@ -152,6 +159,12 @@ export function CoverControls({ c, set, pickCover, hasPhoto }: { c: ReturnType<t
       <button type="button" onClick={pickCover} style={{ border: "1px solid #E6DCC8", background: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, cursor: "pointer", color: "#2A2A2A" }}>
         {hasPhoto ? "Change photo" : "+ Cover photo"}
       </button>
+      {hasPhoto && (
+        <label className="flex items-center gap-1.5" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={c.stamp} onChange={(e) => set({ stamp: e.target.checked })} />
+          <span>Camera stamp</span>
+        </label>
+      )}
       {c.style === "field" && (
         <label className="flex items-center gap-1.5" style={{ flex: "1 1 220px" }}>
           <span style={lab}>By the logo</span>

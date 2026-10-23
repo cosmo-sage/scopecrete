@@ -18,6 +18,7 @@
  */
 
 import { unmark } from "./estimate-flag.ts";
+import type { IfFindLine, ProposalPage } from "./proposal-pages.ts";
 import { budget, quantities, type BudgetLine, type BudgetResult, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "./engine/index.ts";
 
 export interface ProposalDisplay {
@@ -44,6 +45,12 @@ export interface ProposalDisplay {
   preliminary?: boolean;
   /** The cover page (Coy, 2026-10-22: "the cover to be built into the proposal itself and fill a full sheet of paper"). */
   cover?: ProposalCover;
+  /** The proposal's pages, in order (Proposal Builder v2, 2026-10-23; src/lib/proposal-pages.ts). None → the old sections. */
+  pages?: ProposalPage[];
+  /** "If we find…" — unit prices for what can't be seen yet, never in the total. */
+  ifind?: IfFindLine[];
+  /** The date the price holds to, YYYY-MM-DD (blank → "valid 30 days"). */
+  valid_until?: string;
 }
 
 /** How the cover is drawn: a full letter-size sheet (Field or Pour) or the old photo strip. */
@@ -56,6 +63,8 @@ export interface ProposalCover {
   tag?: string;
   /** Pour's three short lines along the foot (blank ones left out). */
   lines?: string[];
+  /** The camera stamp on the cover photo — its date and where it was taken (on unless switched off). */
+  stamp?: boolean;
 }
 
 export const COVER_STYLES: Array<[NonNullable<ProposalCover["style"]>, string]> = [["field", "Field"], ["pour", "Pour"], ["strip", "Photo strip"]];
@@ -88,6 +97,7 @@ export function cleanCover(x: unknown): ProposalCover | undefined {
   const tag = clip(r.tag, 60);
   if (tag.trim()) out.tag = tag;
   if (Array.isArray(r.lines)) out.lines = r.lines.slice(0, 3).map((l) => clip(l, 48));
+  if (typeof r.stamp === "boolean") out.stamp = r.stamp;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -95,7 +105,7 @@ export function cleanCover(x: unknown): ProposalCover | undefined {
 export function coverOf(d: ProposalDisplay | null | undefined): Required<Omit<ProposalCover, "tag">> & { tag: string } {
   const c = cleanCover(d?.cover) ?? {};
   const lines = [0, 1, 2].map((i) => c.lines?.[i] ?? "");
-  return { style: c.style ?? "field", dark: c.dark ?? COVER_COLORS[0].dark, accent: c.accent ?? COVER_COLORS[0].accent, tag: c.tag ?? "", lines };
+  return { style: c.style ?? "field", dark: c.dark ?? COVER_COLORS[0].dark, accent: c.accent ?? COVER_COLORS[0].accent, tag: c.tag ?? "", lines, stamp: c.stamp ?? true };
 }
 
 export interface ProposalArea { id: string; name: string | null; sqft: number | null }

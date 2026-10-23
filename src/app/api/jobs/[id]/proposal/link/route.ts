@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
 import { publicOrigin } from "@/lib/hosts";
 import { FILES_BUCKET } from "@/lib/files";
-import { linkAssets, newToken, publicSnapshot, type LinkAssets } from "@/lib/proposal-links";
+import { linkAssets, newToken, pageFileIds, publicSnapshot, type LinkAssets } from "@/lib/proposal-links";
+import { cleanPages, stampText } from "@/lib/proposal-pages";
 import { POST as finalize } from "../final/route";
 import { proposalNumbers } from "@/lib/proposal-number-server";
 
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const uploads: Array<{ area_id: string; path: string; token: string; signed_url: string }> = [];
     if (!signed_at && row.status !== "accepted") {
       const prev = had ?? { paths: [] };
-      const disp = ((liveShown ?? {}).display ?? {}) as { hide_area_pics?: boolean; picsOff?: Record<string, boolean> };
+      const disp = ((liveShown ?? {}).display ?? {}) as { hide_area_pics?: boolean; picsOff?: Record<string, boolean>; pages?: unknown };
       const shows = (area: string) => !disp.hide_area_pics && !disp.picsOff?.[area];
       const fresh = await areaPhotoPaths(supabase, orgId, id);
       const photos: Record<string, string[]> = {};
@@ -117,7 +118,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const maps: Record<string, string> = { ...(prev.maps ?? {}) };
       const newMaps = Array.isArray(body.maps) ? (body.maps as unknown[]).filter((a): a is string => typeof a === "string" && UUID.test(a) && shows(a) && !maps[a]).slice(0, 40) : [];
       for (const a of newMaps) maps[a] = `${orgId}/proposal/${row.id}/map-${a}.jpg`;
-      const assets = linkAssets(orgId, { logo: prev.logo ?? null, logo_dark: prev.logo_dark ?? null, cover: prev.cover ?? null, maps, photos });
+      const files = await pageFilePaths(supabase, orgId, id, pageFileIds(cleanPages(disp.pages)));
+      const assets = linkAssets(orgId, { logo: prev.logo ?? null, logo_dark: prev.logo_dark ?? null, cover: prev.cover ?? null, maps, photos, files });
       if (JSON.stringify(assets) !== JSON.stringify(prev)) {
         const { error: upErr } = await supabase.from("documents").update({ assets }).eq("org_id", orgId).eq("id", row.id);
         if (upErr) return bad(upErr.message, 500);
@@ -164,10 +166,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     ? await supabase.from("org_project_types").select("label").eq("org_id", orgId).eq("key", prop.project_type as string).maybeSingle()
     : { data: null };
   // The customer's copy: what they see, never the cost side (publicSnapshot()).
-  const shown = publicSnapshot((prop.snapshot ?? {}) as Record<string, unknown>, { project_type: (prop.project_type as string | null) ?? null, type_label: (type?.label as string | undefined) ?? "" });
+  // The cover photo's camera stamp — when and where it was taken (Proposal Builder v2).
+  let coverStamp: string | null = null;
+  if (cover && paths.has(cover)) {
+    const { data: cf } = await supabase.from("files").select("taken_at, lat, lng, created_at").eq("org_id", orgId).eq("id", cover).maybeSingle();
+    if (cf) coverStamp = stampText((cf.taken_at as string | null) ?? (cf.created_at as string | null), cf.lat == null ? null : Number(cf.lat), cf.lng == null ? null : Number(cf.lng));
+  }
+  const shown = publicSnapshot((prop.snapshot ?? {}) as Record<string, unknown>, { project_type: (prop.project_type as string | null) ?? null, type_label: (type?.label as string | undefined) ?? "", cover_stamp: coverStamp });
 
   // An area whose map and photos Coy hid shows none — the browser leaves them out, and so does this.
-  const disp = (shown.display ?? {}) as { hide_area_pics?: boolean; picsOff?: Record<string, boolean> };
+  const disp = (shown.display ?? {}) as { hide_area_pics?: boolean; picsOff?: Record<string, boolean>; pages?: unknown };
   const pics = (area: string) => !disp.hide_area_pics && !disp.picsOff?.[area];
   for (const k of Object.keys(photos)) if (!pics(k)) delete photos[k];
   const token = newToken(randomBytes(24));
@@ -178,6 +186,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const assets = linkAssets(orgId, {
     logo: (org?.logo_light_path as string | null) ?? null, logo_dark: (org?.logo_dark_path as string | null) ?? null,
     cover: cover ? paths.get(cover) ?? null : null, maps, photos,
+    files: await pageFilePaths(supabase, orgId, id, pageFileIds(cleanPages(disp.pages))),
   });
 
   // An older version can't go out beside a newer one the customer signed: two live links, one signed.
@@ -256,5 +265,15 @@ async function areaPhotoRows(sb: Sb, orgId: string, jobId: string) {
     const area = f.section_id ?? (f.takeoff_measurement_id ? shapeArea.get(f.takeoff_measurement_id) : undefined);
     if (area) out.push({ id: f.id, path: f.storage_path, area });
   }
+  return out;
+}
+
+/** The storage paths of the job files the proposal's own pages name (photos and PDF pages) — this job's only. */
+async function pageFilePaths(supabase: Sb, orgId: string, jobId: string, ids: string[]): Promise<Record<string, string>> {
+  const ok = ids.filter((f) => UUID.test(f));
+  if (!ok.length) return {};
+  const { data } = await supabase.from("files").select("id, storage_path").eq("org_id", orgId).eq("job_id", jobId).is("deleted_at", null).in("id", ok);
+  const out: Record<string, string> = {};
+  for (const r of data ?? []) if (r.storage_path) out[r.id as string] = r.storage_path as string;
   return out;
 }

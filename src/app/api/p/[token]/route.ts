@@ -39,13 +39,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     return new Map((s ?? []).filter((x) => x.signedUrl && x.path).map((x) => [x.path as string, x.signedUrl as string]));
   };
   const logos = await sign(BRANDING, [a.logo, a.logo_dark].filter((x): x is string => !!x));
-  const fileUrls = await sign(FILES_BUCKET, [a.cover, ...Object.values(a.maps ?? {}), ...Object.values(a.photos ?? {}).flat()].filter((x): x is string => !!x));
+  const fileUrls = await sign(FILES_BUCKET, [a.cover, ...Object.values(a.maps ?? {}), ...Object.values(a.photos ?? {}).flat(), ...Object.values(a.files ?? {})].filter((x): x is string => !!x));
   const urls = {
     logo: (a.logo && logos.get(a.logo)) ?? null,
     logo_dark: (a.logo_dark && logos.get(a.logo_dark)) ?? null,
     cover: (a.cover && fileUrls.get(a.cover)) ?? null,
     maps: Object.fromEntries(Object.entries(a.maps ?? {}).map(([k, p]) => [k, fileUrls.get(p) ?? null]).filter(([, u]) => u)),
     photos: Object.fromEntries(Object.entries(a.photos ?? {}).map(([k, ps]) => [k, ps.map((p) => fileUrls.get(p)).filter(Boolean)])),
+    // The photos and PDFs on the owner's own pages, by file id; the name is the stored file's last part.
+    files: Object.fromEntries(Object.entries(a.files ?? {}).map(([k, p]) => [k, { url: fileUrls.get(p) ?? null, name: p.split("/").pop() ?? "" }]).filter(([, f]) => (f as { url: string | null }).url)),
   };
   // `signature` is undefined until migration 097 is applied — then signing is off on the page.
   return json({ gone: false, own: !!r.own, org_name: r.org_name, version: r.version, shown: r.shown, urls,

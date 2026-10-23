@@ -30,6 +30,12 @@ import type { PlansData } from "@/components/v34/plan-room/shared";
 import Link from "next/link";
 import { ProposalPreview, type PropLink } from "./preview";
 import { formatProposalNumber, type NumberBase } from "@/lib/proposal-number";
+import {
+  insertAfter, newPageId, pagesOf, withoutNew, patchPage, sellOf, sendCheck, stampText,
+  type ProposalPage, type SendFinding,
+} from "@/lib/proposal-pages";
+import { AddPageMenu, EditorHead, Modal, PageColumn, PullIn, SendCheck, UndoToast, pageFromPick, type AddPick } from "./builder";
+import { sendBytes } from "@/components/v34/files-panel";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -62,7 +68,8 @@ interface Bundle {
   org: { id: string; name: string; logo_light: boolean; logo_dark: boolean; logo_stamp: string | null } | null;
   types: ProjectType[]; templates: DocTemplate[];
   customer: Rec | null; contact: Rec | null; preparer?: Rec | null;
-  photos: Array<{ id: string; name: string | null; url: string | null }>;
+  photos: Array<{ id: string; name: string | null; url: string | null; taken_at?: string | null; lat?: number | null; lng?: number | null }>;
+  pdfs?: Array<{ id: string; name: string | null; url: string | null; category: string | null; bytes: number | null }>;
   number_base?: NumberBase;
 }
 
@@ -153,6 +160,52 @@ export function Proposal({ jobId }: { jobId: string }) {
     save(k as string, v, wait);
   }, [save]);
 
+  // ── The builder (Claude Design "Proposal Builder v2", 2026-10-23): the page list, one page open in the
+  // editor, + Add page, Pull in, the pickers, the check before sending, and the undo toast.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [addAt, setAddAt] = useState<boolean>(false);
+  const [pull, setPull] = useState(false);
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [picker, setPicker] = useState<{ kind: "photos" | "pdf" | "ifind"; pageId: string } | null>(null);
+  const [findings, setFindings] = useState<SendFinding[] | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  const [uploadFor, setUploadFor] = useState<string | null>(null);
+  const uploadRef = React.useRef<HTMLInputElement>(null);
+  const addRef = React.useRef<HTMLDivElement>(null);
+  // Print / PDF draws every page (the builder shows one at a time); it is drawn only while printing.
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    const on = () => setPrinting(true), off = () => setPrinting(false);
+    window.addEventListener("beforeprint", on); window.addEventListener("afterprint", off);
+    return () => { window.removeEventListener("beforeprint", on); window.removeEventListener("afterprint", off); };
+  }, []);
+  const writePages = useCallback((next: ProposalPage[]) => {
+    setP((x) => {
+      if (!x) return x;
+      const display = { ...x.display, pages: next };
+      save("display", display, 250);
+      return { ...x, display };
+    });
+  }, [save]);
+  const pagesChange = useCallback((text: string, before: ProposalPage[], after: ProposalPage[], open?: string | null) => {
+    writePages(after);
+    if (open !== undefined) setOpenId(open);
+    setToast({ text, undo: () => { writePages(before); if (open !== undefined) setOpenId(null); } });
+  }, [writePages]);
+  // A draft opened in the builder keeps its page list from then on (At a glance on); the New tags are
+  // for pages added since it was last opened, so they come off now.
+  useEffect(() => {
+    if (!p || p.status !== "draft") return;
+    const saved = Array.isArray(p.display?.pages) && p.display.pages.length > 0;
+    if (saved && !pagesOf(p.display).some((x) => x.isNew)) return;
+    const next = saved ? pagesOf(p.display).map(withoutNew) : pagesOf(p.display, { fresh: true });
+    const display = { ...p.display, pages: next };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- once per draft opened, then saved
+    setP((x) => (x ? { ...x, display } : x));
+    save("display", display, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per draft opened
+  }, [p?.id, p?.status]);
+
   const isFinal = p?.status === "final";
   const finalShown = viewFinal !== null && viewFinal !== p?.version ? b?.finals.find((f) => f.version === viewFinal) ?? null : null;
   const type = b?.types.find((t) => t.key === p?.project_type) ?? null;
@@ -194,6 +247,14 @@ export function Proposal({ jobId }: { jobId: string }) {
     // A final keeps who prepared it; one finalised before this was kept shows the org alone.
     const by = snap ? snap.prepared_by ?? null : b.preparer ?? null;
     const preparedBy = by ? { name: str(by.name), phone: str(by.phone), email: str(by.email) } : null;
+    // The photos and PDFs a page can name, the cover's camera stamp, and the start day for At a glance.
+    const files: NonNullable<DocVM["files"]> = {};
+    for (const f of [...b.photos, ...(b.pdfs ?? [])]) if (f.url) files[f.id] = { url: f.url, name: f.name ?? "File" };
+    const cov = b.photos.find((f) => f.id === (snap ? snap.cover_file_id : p.cover_file_id));
+    const coverStamp = cov ? stampText(cov.taken_at, cov.lat, cov.lng) : null;
+    const st = str(b.job.scheduled_start);
+    const startLabel = st ? new Date(`${st.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }) : null;
+    const extra = { files, coverStamp, startLabel };
     if (snap) {
       const coverUrl = b.photos.find((f) => f.id === snap.cover_file_id)?.url ?? null;
       return {
@@ -203,7 +264,7 @@ export function Proposal({ jobId }: { jobId: string }) {
         choices: snap.choices ?? null,
         check: snap.choices ? { sum: 100, gap: 0, ok: true, pct: 100 } : snap.price.ok ? drawsCheck(snap.draws, snap.price.total) : null,
         warranty: { ...snap.warranty_text, template: snap.warranty_text.template?.name ?? null },
-        terms: { ...snap.terms_text, template: snap.terms_text.template?.name ?? null }, typeDraws: [],
+        terms: { ...snap.terms_text, template: snap.terms_text.template?.name ?? null }, typeDraws: [], ...extra,
       };
     }
     const w = warrantyText(p.warranty, b.templates, orgName);
@@ -216,15 +277,37 @@ export function Proposal({ jobId }: { jobId: string }) {
       scopeIntro: p.scope_intro, areas: areasOf(b.sections), visuals: areaVisuals(plans, b.sections.map((x) => x.id)), priced: priced!.priced, display: p.display ?? {}, draws: p.draws ?? [],
       choices: picks ? { list: picks.choices, shared: picks.shared } : null,
       check: picks ? picks.check : priced!.check, warranty: { ...w, template: w.template?.name ?? null }, terms: { ...t, template: t.template?.name ?? null },
-      typeDraws: type?.draws ?? [],
+      typeDraws: type?.draws ?? [], ...extra,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- logo() reads b.org only
   }, [b, p, priced, picks, finalShown, isFinal, type, orgName, plans]);
 
   // The emblem beside each part Dusty can edit opens him with a starter question; "Use this" under the
   // boxed words of his answer brings only those back here (Coy, 2026-10-10; src/lib/dusty/use-block.ts).
-  const dusty = useCallback((kind: "warranty" | "terms" | "scope" | "area", areaId?: string) => {
+  const dusty = useCallback((kind: "warranty" | "terms" | "scope" | "area" | "page", areaId?: string) => {
     if (!vm) return;
+    if (kind === "page") {
+      // A text page of the owner's own: Dusty rewrites (or writes) it; Use this puts his words in.
+      const pg = pagesOf(p?.display).find((x) => x.id === areaId);
+      if (!pg) return;
+      const ask = `Write the "${pg.label}" page of this proposal for the customer, in plain words. Use "# " for a heading and "- " for a bullet. No prices.${pg.body?.trim() ? `\n\nWhat it says now:\n${pg.body}` : ""}`;
+      setDustyUse({
+        label: `on the "${pg.label}" page`,
+        apply: (text) => {
+          const body = text.replace(/\r/g, "").replace(/^\s*[*•]\s+/gm, "- ").trim();
+          if (!body) return false;
+          setP((x) => {
+            if (!x) return x;
+            const display = { ...x.display, pages: patchPage(pagesOf(x.display), pg.id, { body }) };
+            save("display", display, 0);
+            return { ...x, display };
+          });
+        },
+      });
+      window.dispatchEvent(new Event("sc:dusty-open"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `${ask}\n\n${USE_ASK}`, send: true } })), 250);
+      return;
+    }
     const area = kind === "area" ? vm.areas.find((a) => a.id === areaId) : undefined;
     if (kind === "area" && !area) return;
     const areaName = area ? area.name || area.work_type || "this area" : "";
@@ -250,7 +333,7 @@ export function Proposal({ jobId }: { jobId: string }) {
     });
     window.dispatchEvent(new Event("sc:dusty-open"));
     setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `${ask}\n\n${USE_ASK}`, send: true } })), 250);
-  }, [vm, p, change, jobId]);
+  }, [vm, p, change, jobId, save]);
   useEffect(() => () => setDustyUse(null), []);
 
   const saveTemplate = useCallback(async (kind: "warranty" | "terms") => {
@@ -324,6 +407,73 @@ export function Proposal({ jobId }: { jobId: string }) {
     ? stuckChoice ? `${stuckChoice.label} has no price yet: ${stuckChoice.blocked}` : vm.check && !vm.check.ok ? "with every option offered, the draws must be percentages that add up to 100%" : null
     : !vm.priced.ok ? `the budget has no price yet: ${vm.priced.blocked[0] ?? ""}` : vm.check && !vm.check.ok ? "the draws don't add up to the total" : null;
   const d = vm.display;
+  // ── The builder's list: every change saved on the draft, with its words for the undo toast.
+  const pages = pagesOf(p.display);
+  const shownPages = pagesOf(vm.display);
+  const open = (editable ? pages : shownPages).find((x) => x.id === openId)?.id ?? (editable ? pages : shownPages)[0]?.id ?? null;
+  const openPage = (editable ? pages : shownPages).find((x) => x.id === open) ?? null;
+  const usedFiles = new Set(pages.flatMap((x) => [...(x.photos ?? []).map((f) => f.id), ...(x.file ? [x.file] : [])]));
+  const goTo = (id: string) => { setOpenId(id); if (!wide) setListOpen(false); document.querySelector(".sc-doc-scroll")?.scrollTo({ top: 0 }); };
+  const addPick = (pick: AddPick) => {
+    setAddAt(false);
+    const page = pageFromPick(pick, pages);
+    pagesChange(`Added "${page.label}"`, pages, insertAfter(pages, open, page), page.id);
+    if (pick.then === "photos") setPicker({ kind: "photos", pageId: page.id });
+    if (pick.then === "pdf") setPicker({ kind: "pdf", pageId: page.id });
+    if (pick.then === "upload") { setUploadFor(page.id); setTimeout(() => uploadRef.current?.click(), 0); }
+  };
+  const addPhotosTo = (pageId: string, ids: string[]) => {
+    const pg = pages.find((x) => x.id === pageId);
+    if (!pg || !ids.length) return;
+    const have = new Set((pg.photos ?? []).map((f) => f.id));
+    const photos = [...(pg.photos ?? []), ...ids.filter((id) => !have.has(id)).map((id) => ({ id }))].slice(0, 24);
+    pagesChange(`Added ${ids.length} ${ids.length === 1 ? "photo" : "photos"} to "${pg.label}"`, pages, patchPage(pages, pageId, { photos }));
+  };
+  const setPdf = (pageId: string, fileId: string, name: string | null) => {
+    const pg = pages.find((x) => x.id === pageId);
+    if (!pg) return;
+    const label = !pg.label || /^attached document$/i.test(pg.label) ? (name ?? "Attached document").replace(/\.pdf$/i, "").slice(0, 80) : pg.label;
+    pagesChange(`Attached ${name ?? "the file"}`, pages, patchPage(pages, pageId, { file: fileId, label, skip: undefined }));
+  };
+  // Pull in: a photo goes on the open photos page, else a new Photos page after the open one; a PDF is a page of its own.
+  const pullPhoto = (id: string) => {
+    if (openPage?.kind === "photos") return addPhotosTo(openPage.id, [id]);
+    const page = pageFromPick({ kind: "photos" }, pages);
+    const withPhoto = { ...page, photos: [{ id }] };
+    pagesChange(`Added a Photos page`, pages, insertAfter(pages, open, withPhoto), page.id);
+  };
+  const pullPdf = (id: string) => {
+    const f = b.pdfs?.find((x) => x.id === id);
+    const page = { ...pageFromPick({ kind: "pdf" }, pages), file: id, label: (f?.name ?? "Attached document").replace(/\.pdf$/i, "").slice(0, 80) };
+    pagesChange(`Added "${page.label}"`, pages, insertAfter(pages, open, page), page.id);
+  };
+  const uploadPdf = async (file: File) => {
+    const pageId = uploadFor;
+    setUploadFor(null);
+    if (!pageId) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) { setErr("That isn't a PDF."); return; }
+    try {
+      setBusy(`Uploading ${file.name}… 0%`);
+      const made = await call("/api/files", "POST", { name: file.name, mime: "application/pdf", size: file.size, job_id: jobId, category: "other" });
+      await sendBytes(made.upload.signed_url, file, (pct) => setBusy(`Uploading ${file.name}… ${pct}%`));
+      await call(`/api/files/${made.file.id}/done`, "POST");
+      const fresh = (await call(`/api/jobs/${jobId}/proposal`, "GET")) as Bundle;
+      setB((x) => (x ? { ...x, pdfs: fresh.pdfs, photos: fresh.photos } : x));
+      setPdf(pageId, made.file.id as string, file.name);
+    } catch (e) { setErr(`The PDF wasn't uploaded: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(null); }
+  };
+  // Before sending: what to look at (Proposal Builder v2's check). Nothing in it blocks; Send anyway goes on.
+  const toPreview = () => {
+    flushSaves();
+    if (editable) {
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const shownLines = vm.priced.ok ? vm.priced.groups.filter((g) => !g.hidden).flatMap((g) => g.items.filter((l) => !l.hidden).map((l) => ({ name: l.name, qty: l.qty, unit: l.unit }))) : [];
+      const f = sendCheck({ pages, lines: d.show_qty ? shownLines : [], ifind: d.ifind, valid_until: d.valid_until, today });
+      if (f.length) { setFindings(f); return; }
+    }
+    setPreview(true);
+  };
   const edits = editable ? {
     display: (x: ProposalDisplay) => change("display", x, 250),
     draws: (x: Draw[]) => change("draws", x),
@@ -332,6 +482,9 @@ export function Proposal({ jobId }: { jobId: string }) {
     terms: (c: Clause[]) => change("terms", { ...p.terms, clauses: c }),
     saveTemplate: (k: "warranty" | "terms") => void saveTemplate(k),
     dusty, pickCover: () => setCoverPick(true),
+    addIfFind: () => setPicker({ kind: "ifind", pageId: pages.find((x) => x.kind === "ifind")?.id ?? "" }),
+    addPhotos: (pageId: string) => setPicker({ kind: "photos", pageId }),
+    pickPdf: (pageId: string) => setPicker({ kind: "pdf", pageId }),
     // The area's scope of work is the section's — saved there, so the budget's list follows (Coy, 2026-10-10).
     scope: (sid: string, text: string | null) => {
       setB((x) => (x ? { ...x, sections: x.sections.map((y) => (String(y.id) === sid ? { ...y, prep_notes: text } : y)) } : x));
@@ -377,12 +530,12 @@ export function Proposal({ jobId }: { jobId: string }) {
             </select>
           )}
           {(!blocked || !editable) && (
-            <button onClick={() => window.print()} title="Print, or Save as PDF from the print dialog" className="rounded"
+            <button onClick={() => { setPrinting(true); setTimeout(() => window.print(), 900); }} title="Print, or Save as PDF from the print dialog" className="rounded"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
               {wide ? "Print / PDF" : "PDF"}
             </button>
           )}
-            <button onClick={() => { flushSaves(); setPreview(true); }} disabled={!!busy} className="rounded"
+            <button onClick={toPreview} disabled={!!busy} className="rounded"
               style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{sentNow ? (wide ? "Preview & resend" : "Resend") : wide ? "Preview & send" : "Send"}</button>
           {/* Copy the link to send it yourself (Coy, 2026-10-07). With no link for this version yet, the
               Preview makes one — sending or copying there freezes a draft first. */}
@@ -458,12 +611,106 @@ export function Proposal({ jobId }: { jobId: string }) {
             {err ?? busy ?? `Final — frozen ${new Date((finalShown ?? b.finals.find((f) => f.version === p.version))?.finalized_at ?? p.finalized_at ?? p.created_at).toLocaleString()}. This is what the customer was shown; the job's budget can move on. Start a new version to change it.`}
           </div>
         )}
-        <div className="sc-doc-scroll flex-1" style={{ padding: wide ? "20px 20px 60px" : "10px 8px 80px" }}>
-          {editable && !wide && <div className="sc-no-print flex gap-1.5 overflow-x-auto" style={{ marginBottom: 8 }}>{chips}</div>}
-          <ProposalDocument vm={vm} edits={edits} narrow={!wide} />
-          {editable && <div className="sc-no-print" style={{ maxWidth: 720, margin: "12px auto 0", fontSize: 11.5, color: "#5E5A52" }}>Photos &amp; plan pages, an options comparison and references come later.</div>}
+        <div className="flex flex-1" style={{ minHeight: 0 }}>
+          {/* The page list (Proposal Builder v2): a column on a desktop, a fold above the page on a phone. */}
+          {wide && (
+            <div className="sc-no-print shrink-0" style={{ width: 248, borderRight: `1px solid ${T.hair}`, background: T.card, position: "sticky", top: "var(--sc-head)", alignSelf: "flex-start", maxHeight: "calc(100dvh - var(--sc-head))", overflowY: "auto" }}>
+              <div className="flex items-center" style={{ padding: "10px 12px 6px" }}>
+                <span style={lbl}>Pages · {(editable ? pages : shownPages).length}</span>
+                <span className="flex-1" />
+                {editable && <button onClick={() => setPull((x) => !x)} style={{ fontSize: 12, fontWeight: 600, color: T.chalk }}>{pull ? "Close Pull in" : "Pull in ›"}</button>}
+              </div>
+              <div ref={addRef} className="relative">
+                <PageColumn pages={editable ? pages : shownPages} openId={open} onOpen={goTo} editable={editable} change={pagesChange}
+                  onAdd={() => setAddAt(true)} onSaveTemplate={() => setToast({ text: "Page templates wait on a database change — ask for it when you want them." })} />
+                {addAt && openPage && (
+                  <AddPageMenu after={openPage.label || "this page"} pages={pages} hasPhotos={b.photos.length > 0} hasPdfs={(b.pdfs ?? []).length > 0}
+                    onPick={addPick} onClose={() => setAddAt(false)} style={{ left: 8, bottom: 40 }} />
+                )}
+              </div>
+            </div>
+          )}
+          <div className="sc-doc-scroll flex-1" style={{ minWidth: 0, padding: wide ? "20px 20px 60px" : "10px 8px 80px" }}>
+            {editable && !wide && <div className="sc-no-print flex gap-1.5 overflow-x-auto" style={{ marginBottom: 8 }}>{chips}</div>}
+            {!wide && (
+              <div className="sc-no-print relative" style={{ maxWidth: 720, margin: "0 auto 8px", background: T.card, border: `1px solid ${T.hair}`, borderRadius: 6 }}>
+                <button onClick={() => setListOpen((x) => !x)} aria-expanded={listOpen} className="w-full flex items-center gap-2 text-left" style={{ height: 40, padding: "0 12px" }}>
+                  <span style={lbl}>Page {Math.max(1, (editable ? pages : shownPages).findIndex((x) => x.id === open) + 1)} of {(editable ? pages : shownPages).length}</span>
+                  <span className="flex-1 truncate" style={{ fontSize: 13, color: T.ink }}>{openPage?.label}</span>
+                  <span style={{ color: T.ink3 }}>{listOpen ? "▴" : "▾"}</span>
+                </button>
+                {listOpen && (
+                  <div className="relative" style={{ borderTop: `1px solid ${T.hair}` }}>
+                    <PageColumn pages={editable ? pages : shownPages} openId={open} onOpen={goTo} editable={editable} change={pagesChange}
+                      onAdd={() => setAddAt(true)} onSaveTemplate={() => setToast({ text: "Page templates wait on a database change — ask for it when you want them." })} />
+                    {editable && <button onClick={() => { setPull(true); setListOpen(false); }} style={{ display: "block", padding: "8px 12px", fontSize: 12.5, fontWeight: 600, color: T.chalk }}>Pull in from the job ›</button>}
+                    {addAt && openPage && (
+                      <AddPageMenu after={openPage.label || "this page"} pages={pages} hasPhotos={b.photos.length > 0} hasPdfs={(b.pdfs ?? []).length > 0}
+                        onPick={addPick} onClose={() => setAddAt(false)} style={{ left: 0, right: 0, top: 40 }} />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="sc-no-print">
+              {openPage && <EditorHead page={openPage} editable={editable} who={vm.customer.person ?? vm.customer.name ?? "The customer"}
+                onRename={(v) => pagesChange(`Renamed "${openPage.label}"`, pages, patchPage(pages, openPage.id, { label: v.slice(0, 80) }))}
+                onSwitchOn={() => pagesChange(`Switched on "${openPage.label}"`, pages, patchPage(pages, openPage.id, { off: undefined }))} />}
+              <ProposalDocument vm={vm} edits={edits} narrow={!wide} only={open ?? undefined} />
+              {open && (() => {
+                const list = editable ? pages : shownPages, i = list.findIndex((x) => x.id === open);
+                return (
+                  <div className="flex items-center" style={{ maxWidth: 720, margin: "10px auto 0", fontSize: 12.5 }}>
+                    {i > 0 && <button onClick={() => goTo(list[i - 1].id)} style={{ color: T.chalk }}>‹ {list[i - 1].label}</button>}
+                    <span className="flex-1" />
+                    {i < list.length - 1 && <button onClick={() => goTo(list[i + 1].id)} style={{ color: T.chalk }}>{list[i + 1].label} ›</button>}
+                  </div>
+                );
+              })()}
+            </div>
+            {printing && <div className="sc-print-block"><ProposalDocument vm={vm} edits={null} narrow={false} /></div>}
+          </div>
+          {pull && editable && (
+            <div className="sc-no-print shrink-0" style={wide
+              ? { width: 320, borderLeft: `1px solid ${T.hair}`, background: T.card, position: "sticky", top: "var(--sc-head)", alignSelf: "flex-start", height: "calc(100dvh - var(--sc-head))" }
+              : { position: "fixed", inset: "var(--sc-head) 0 var(--sc-foot, 0px) 0", zIndex: 40, background: T.card }}>
+              <PullIn photos={b.photos.map((f) => ({ id: f.id, name: f.name, url: f.url, when: f.taken_at ? new Date(f.taken_at).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : null }))}
+                pdfs={(b.pdfs ?? []).map((f) => ({ id: f.id, name: f.name, category: f.category }))}
+                areas={vm.areas.map((a) => a.name || a.work_type || "Area")} used={usedFiles}
+                onPhoto={pullPhoto} onPdf={pullPdf} onClose={() => setPull(false)} budgetHref={`/dashboard/scope/${jobId}`} />
+            </div>
+          )}
         </div>
       </div>
+      <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void uploadPdf(f); else setUploadFor(null); }} />
+      {picker?.kind === "photos" && (
+        <PhotoPicker photos={b.photos} have={new Set((pages.find((x) => x.id === picker.pageId)?.photos ?? []).map((f) => f.id))}
+          onAdd={(ids) => { addPhotosTo(picker.pageId, ids); setPicker(null); }} onClose={() => setPicker(null)} />
+      )}
+      {picker?.kind === "pdf" && (
+        <Modal title="Pick a PDF" onClose={() => setPicker(null)}
+          foot={<button onClick={() => { setUploadFor(picker.pageId); setPicker(null); setTimeout(() => uploadRef.current?.click(), 0); }} className="rounded" style={{ height: 32, padding: "0 12px", border: `1px solid ${T.hairStrong}`, fontSize: 13, color: T.ink }}>↑ Upload a PDF</button>}>
+          {!(b.pdfs ?? []).length && <div style={{ fontSize: 13, color: T.ink3 }}>No PDFs on this job yet. Upload one — it is saved to the job&apos;s files.</div>}
+          {(b.pdfs ?? []).map((f) => (
+            <button key={f.id} onClick={() => { setPdf(picker.pageId, f.id, f.name); setPicker(null); }} className="w-full flex items-center gap-2 text-left hover:bg-black/5" style={{ padding: "9px 4px", borderBottom: `1px solid ${T.hairSoft}` }}>
+              <span className="flex-1 truncate" style={{ fontSize: 13, color: T.ink }}>{f.name ?? "File"}</span>
+              <span style={{ fontSize: 11.5, color: T.ink3 }}>{f.category === "vendor_quote" ? "Vendor quote" : f.category === "bid" ? "Bid" : ""}{f.bytes ? ` · ${(f.bytes / 1048576).toFixed(1)} MB` : ""}</span>
+            </button>
+          ))}
+        </Modal>
+      )}
+      {picker?.kind === "ifind" && (
+        <IfFindPicker overhead={b.settings.overhead_pct} margin={margin} have={new Set((d.ifind ?? []).map((l) => l.item_id).filter(Boolean) as string[])}
+          onAdd={(line) => {
+            const taken = (d.ifind ?? []).map((l) => l.id);
+            edits?.display({ ...d, ifind: [...(d.ifind ?? []), { ...line, id: newPageId(taken) }].slice(0, 30) });
+          }} onClose={() => setPicker(null)} />
+      )}
+      {findings && (
+        <SendCheck findings={findings} label={(id) => (id ? pages.find((x) => x.id === id)?.label ?? "" : "At a glance")}
+          onGo={(id) => { setFindings(null); goTo(id); }} onSend={() => { setFindings(null); setPreview(true); }} onClose={() => setFindings(null)} />
+      )}
+      {toast && <UndoToast text={toast.text} onUndo={toast.undo} onDone={() => setToast(null)} />}
 
       {preview && (
         <ProposalPreview jobId={jobId} vm={vm} draft={editable} version={sendVersion} blocked={editable ? blocked : null} coverFileId={finalShown ? undefined : p.cover_file_id}
@@ -521,5 +768,70 @@ function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl, e
       <Link href="/dashboard/settings/templates" style={{ alignSelf: "center", fontSize: 12, color: T.chalk }}>Edit templates ›</Link>
       {extra && <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">{extra}</div>}
     </div>
+  );
+}
+
+/** The job's photos to put on a photos page, several at once. */
+function PhotoPicker({ photos, have, onAdd, onClose }: {
+  photos: Bundle["photos"]; have: Set<string>; onAdd: (ids: string[]) => void; onClose: () => void;
+}) {
+  const [pick, setPick] = useState<string[]>([]);
+  const list = photos.filter((f) => f.url);
+  return (
+    <Modal title="Add photos" onClose={onClose} width={640}
+      foot={<button disabled={!pick.length} onClick={() => onAdd(pick)} className="rounded" style={{ height: 32, padding: "0 14px", background: pick.length ? T.hiviz : T.sunk, color: pick.length ? T.onHiviz : T.ink3, fontWeight: 600, fontSize: 13 }}>
+        {pick.length ? `Add ${pick.length} ${pick.length === 1 ? "photo" : "photos"}` : "Pick photos"}</button>}>
+      {!list.length && <div style={{ fontSize: 13, color: T.ink3 }}>No photos on this job yet — each area on the job page has Photos, and the Camera files shots on the job.</div>}
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
+        {list.map((f) => {
+          const on = pick.includes(f.id), had = have.has(f.id);
+          return (
+            <button key={f.id} disabled={had} onClick={() => setPick((x) => (on ? x.filter((y) => y !== f.id) : [...x, f.id]))} title={f.name ?? ""} aria-pressed={on}
+              className="relative" style={{ aspectRatio: "4/3", background: `#ddd url("${f.url}") center/cover`, borderRadius: 4, border: on ? `3px solid ${T.hiviz}` : `1px solid ${T.hair}`, opacity: had ? 0.4 : 1 }}>
+              {(on || had) && <span style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: 10, background: had ? T.ink3 : T.hiviz, color: "#fff", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+/** If we find…: a Price book item at its price to the customer (the job's O.H. and margin), never in the total. */
+function IfFindPicker({ overhead, margin, have, onAdd, onClose }: {
+  overhead: number | null; margin: number | null; have: Set<string>;
+  onAdd: (line: { item_id: string; name: string; unit: string; sell: number }) => void; onClose: () => void;
+}) {
+  const [items, setItems] = useState<Array<{ id: string; name: string; unit: string | null; unit_cost: number | null }> | null>(null);
+  const [q, setQ] = useState("");
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let off = false;
+    call("/api/cost-items", "GET").then((d) => { if (!off) setItems(((d.items ?? []) as Array<Record<string, unknown>>).map((r) => ({ id: String(r.id), name: String(r.name ?? ""), unit: str(r.unit), unit_cost: n(r.unit_cost) }))); })
+      .catch(() => { if (!off) setItems([]); });
+    return () => { off = true; };
+  }, []);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = (items ?? []).filter((i) => words.every((w) => i.name.toLowerCase().includes(w))).slice(0, 60);
+  return (
+    <Modal title="If we find… — from the Price book" onClose={onClose} width={560}>
+      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Price book" aria-label="Search the Price book"
+        style={{ width: "100%", height: 34, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 10px", fontSize: 14, background: T.card, color: T.ink, marginBottom: 6 }} />
+      {(overhead === null || margin === null) && <div style={{ fontSize: 12, color: T.red, marginBottom: 6 }}>The job has no O.H. or margin yet, so there&apos;s no price to show. Set them on the Budget.</div>}
+      {items === null && <div style={{ fontSize: 13, color: T.ink3 }}>Opening the Price book…</div>}
+      {shown.map((i) => {
+        const sell = i.unit_cost !== null ? sellOf(i.unit_cost, overhead, margin) : null;
+        const done = have.has(i.id) || added.has(i.id);
+        return (
+          <div key={i.id} className="flex items-center gap-2" style={{ padding: "7px 0", borderBottom: `1px solid ${T.hairSoft}` }}>
+            <span className="flex-1 min-w-0" style={{ fontSize: 13, color: T.ink }}>{i.name}</span>
+            <span style={{ fontSize: 12.5, color: T.ink2, whiteSpace: "nowrap" }}>{sell !== null ? `${usd(sell)} / ${i.unit || "each"}` : i.unit_cost === null ? "no price" : "—"}</span>
+            <button disabled={done || sell === null} onClick={() => { onAdd({ item_id: i.id, name: i.name, unit: i.unit ?? "", sell: sell! }); setAdded((x) => new Set(x).add(i.id)); }}
+              style={{ width: 54, fontSize: 12.5, fontWeight: 600, color: done ? T.green : sell === null ? T.ink3 : T.chalk }}>{done ? "Added" : "+ Add"}</button>
+          </div>
+        );
+      })}
+      {items && !shown.length && <div style={{ fontSize: 13, color: T.ink3 }}>Nothing in the Price book by that name.</div>}
+    </Modal>
   );
 }

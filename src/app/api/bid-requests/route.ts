@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, randomUUID } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
 import { BIDS_MISSING, composeFor, missing091 } from "@/lib/bids-server";
-import { bidEmail, bidText, priorRates, shownScopes, type PriceLine, type ScopePick } from "@/lib/bids";
+import { bidEmail, bidText, cleanRequirements, priorRates, shownScopes, type PriceLine, type ScopePick } from "@/lib/bids";
 import { newToken } from "@/lib/proposal-links";
 import { publicOrigin } from "@/lib/hosts";
 import { orgRow } from "@/lib/org-server";
@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
     quantities: pick.quantities !== false,
     files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, path: f.path, section: f.section ?? null })),
     maps: {} as Record<string, string>,
+    requirements: cleanRequirements(pk.requirements),
   };
   // Each shown section's takeoffs on its sheet, as a picture the browser draws and uploads next.
   const reqId = randomUUID();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cleanRequirements } from "@/lib/bids";
 import { getReaderClient } from "@/lib/api-auth";
 import { FILES_BUCKET } from "@/lib/files";
 
@@ -22,7 +23,7 @@ const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
 interface Shared {
   gone: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
   price_mode?: string; price_by?: string | null; pour_date?: string | null; scopes?: unknown; note?: string | null;
-  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string; section?: string | null }>; maps?: Record<string, string> };
+  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string; section?: string | null }>; maps?: Record<string, string>; requirements?: unknown };
   rates?: Record<string, number> | null; answer?: unknown;
 }
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   return json({
     gone: false, own: !!r.own, org_name: r.org_name, job_title: r.job_title ?? null, first_name: r.first_name ?? null,
     price_mode: r.price_mode, price_by: r.packet?.dates === false ? null : r.price_by ?? null, pour_date: r.packet?.dates === false ? null : r.pour_date ?? null,
-    scopes: r.scopes ?? [], note: r.note ?? null, address: r.packet?.address ?? null,
+    scopes: r.scopes ?? [], note: r.note ?? null, address: r.packet?.address ?? null, requirements: cleanRequirements(r.packet?.requirements),
     // An older request carried the sections' Notes as "access"; those are Coy's own and no longer shown.
     access: null,
     files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, section: f.section ?? null, url: url.get(f.path) ?? null })).filter((f) => f.url),

@@ -19,9 +19,9 @@
  */
 import React, { useEffect, useState } from "react";
 import { disp, strong } from "@/lib/v34/tokens";
-import { dueLabel, isTimeUnit, jobTotals, sizeParts, type Measure } from "@/lib/bids";
+import { GROUP_LABEL, dueLabel, groupLines, groupState, isTimeUnit, jobTotals, lineExt, sizeParts, type BidGroup, type Measure } from "@/lib/bids";
 
-export interface DocLine { key: string; name: string; qty: number | null; unit: string | null; supplied: boolean; on?: boolean }
+export interface DocLine { key: string; name: string; qty: number | null; unit: string | null; supplied: boolean; on?: boolean; group?: BidGroup }
 export interface DocScope {
   key: string; title: string; size: string | null; measure?: Measure | null; lines: DocLine[]; on?: boolean;
   /** The section's takeoffs on its sheet, drawn live in the composer. */
@@ -33,15 +33,20 @@ export interface DocScope {
 export interface BidDocVM {
   org: string | null; jobTitle: string | null; forName?: string | null; address?: string | null;
   priceBy?: string | null; pourDate?: string | null; note?: string | null; scopes: DocScope[];
+  /** What they're asked to send with the bid (insurance, W-9 …). */
+  requirements?: string[];
 }
 export interface BidDocEdits {
   scope: (key: string, on: boolean) => void;
   line: (key: string, on: boolean) => void;
   supplied: (key: string, on: boolean) => void;
+  /** A Labor · Materials · Equipment group's tick: every line of it in or out. */
+  group?: (keys: string[], on: boolean) => void;
 }
 
-const P = { ink: "#2A2A2A", ink2: "#5E5A52", ink3: "#8C8578", hair: "#E6DCC8", paper: "#FBF6EC", accent: "#B85A3C", accentText: "#9A4527", green: "#2F8A5B", greenBg: "#E5F2EA", red: "#B5412C", redBg: "#FBEAE6" };
+const P = { navy: "#01224B", band: "#F6F7F9", ink: "#2A2A2A", ink2: "#5E5A52", ink3: "#8C8578", hair: "#E6DCC8", paper: "#FBF6EC", accent: "#B85A3C", accentText: "#9A4527", green: "#2F8A5B", greenBg: "#E5F2EA", red: "#B5412C", redBg: "#FBEAE6" };
 const kicker: React.CSSProperties = { fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: P.ink3 };
+const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 const f2 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const day = (iso: string | null | undefined) => iso ? new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) : null;
 const centralToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
@@ -49,11 +54,11 @@ const centralToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "A
 /** A line's quantity as the vendor reads it — none for a line in days or hours. */
 export const lineQty = (l: Pick<DocLine, "qty" | "unit">) => isTimeUnit(l.unit) || l.qty === null ? null : `${f2(l.qty)}${l.unit ? ` ${l.unit}` : ""}`;
 
-function Tick({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
+function Tick({ on, part, onClick, label }: { on: boolean; part?: boolean; onClick: () => void; label: string }) {
   return (
-    <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} role="checkbox" aria-checked={on} aria-label={label} className="sc-no-print"
+    <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} role="checkbox" aria-checked={part ? "mixed" : on} aria-label={label} className="sc-no-print"
       style={{ width: 18, height: 18, flex: "none", borderRadius: 3, border: `1.5px solid ${on ? P.green : "#C9BDA6"}`, background: on ? P.green : "#fff", color: "#fff", fontSize: 12, lineHeight: 1, cursor: "pointer", padding: 0 }}>
-      {on ? "✓" : ""}
+      {part ? "–" : on ? "✓" : ""}
     </button>
   );
 }
@@ -92,8 +97,10 @@ function Viewer({ pics, at, onClose }: { pics: Pic[]; at: number; onClose: () =>
   );
 }
 
-export function BidDocument({ vm, edits, price, narrow }: {
+export function BidDocument({ vm, edits, price, prices, narrow }: {
   vm: BidDocVM; edits?: BidDocEdits | null;
+  /** The vendor's prices so far, by line, for each group's subtotal. */
+  prices?: Record<string, number | null | undefined>;
   /** The vendor's price box for one line (the link, per-item pricing). */
   price?: (l: DocLine) => React.ReactNode;
   narrow: boolean;
@@ -207,29 +214,50 @@ export function BidDocument({ vm, edits, price, narrow }: {
               )}
               {lines.length > 0 && (
                 <div style={{ marginTop: 6, paddingLeft: edits ? 46 : 26 }}>
-                  {lines.map((l) => {
-                    const lon = l.on !== false;
-                    const q = lineQty(l);
-                    const box = !edits && price && !l.supplied ? price(l) : null;
+                  {groupLines(lines).map((g) => {
+                    // A group's subtotal on the vendor's page: what their prices on its lines come to.
+                    const sub = prices && g.group ? g.lines.reduce<number | null>((t, l) => {
+                      const p = l.supplied ? null : prices[l.key];
+                      return p === null || p === undefined || !Number.isFinite(p) ? t : (t ?? 0) + lineExt(l, p);
+                    }, null) : null;
+                    const keys = g.lines.map((l) => l.key);
+                    const st = edits?.group ? groupState(keys, (k) => g.lines.find((l) => l.key === k)?.on !== false) : null;
                     return (
-                      <div key={l.key} style={{ padding: "7px 0", borderTop: `1px dashed ${P.hair}`, opacity: lon ? 1 : 0.5 }}>
-                        <div className="flex items-start gap-2">
-                          {edits && <Tick on={lon} onClick={() => edits.line(l.key, !lon)} label={`${lon ? "Leave out" : "Put in"} ${l.name}`} />}
-                          <div className="flex-1" style={{ minWidth: 0, fontSize: 14 }}>
-                            {l.name}
-                            {l.supplied && <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 3, background: P.greenBg, color: P.green, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>{vm.org ?? "We"} supplies — don&apos;t price</span>}
+                      <div key={g.group ?? "all"}>
+                        {g.group && (
+                          <div className="flex items-center gap-2" style={{ padding: "6px 8px", marginTop: 4, background: P.band, borderTop: `1px solid ${P.hair}` }}>
+                            {edits?.group && st && <Tick on={st !== "none"} part={st === "some"} onClick={() => edits.group!(keys, st !== "all")} label={`${st === "all" ? "Leave out" : "Put in"} every ${GROUP_LABEL[g.group].toLowerCase()} line`} />}
+                            <span style={{ flex: 1, fontFamily: disp, fontSize: 12, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: P.navy }}>{GROUP_LABEL[g.group]}</span>
+                            {edits && <span style={{ fontSize: 11.5, color: P.ink3 }}>{g.lines.filter((l) => l.on !== false).length} of {g.lines.length}</span>}
+                            {sub !== null && <span style={{ fontSize: 12.5, fontWeight: 700, color: P.navy, fontVariantNumeric: "tabular-nums" }}>{money(sub)}</span>}
                           </div>
-                          <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: q ? P.ink : P.ink3 }}>{q ?? (l.supplied ? "" : "one price")}</span>
-                          {edits && lon && (
-                            <button type="button" onClick={() => edits.supplied(l.key, !l.supplied)} title="Who supplies the material" className="sc-no-print"
-                              style={{ height: 22, padding: "0 7px", borderRadius: 3, fontFamily: disp, fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer",
-                                border: `1px solid ${l.supplied ? P.green : P.hair}`, background: l.supplied ? P.greenBg : "#fff", color: l.supplied ? P.green : P.ink3, whiteSpace: "nowrap" }}>
-                              {l.supplied ? `${vm.org ?? "We"} supplies` : "They price it"}
-                            </button>
-                          )}
-                          {box && !narrow && box}
-                        </div>
-                        {box && narrow && <div style={{ marginTop: 6 }}>{box}</div>}
+                        )}
+                        {g.lines.map((l) => {
+                          const lon = l.on !== false;
+                          const q = lineQty(l);
+                          const box = !edits && price && !l.supplied ? price(l) : null;
+                          return (
+                            <div key={l.key} style={{ padding: "7px 0", paddingLeft: g.group ? 8 : 0, borderTop: `1px dashed ${P.hair}`, opacity: lon ? 1 : 0.5 }}>
+                              <div className="flex items-start gap-2">
+                                {edits && <Tick on={lon} onClick={() => edits.line(l.key, !lon)} label={`${lon ? "Leave out" : "Put in"} ${l.name}`} />}
+                                <div className="flex-1" style={{ minWidth: 0, fontSize: 14 }}>
+                                  {l.name}
+                                  {l.supplied && <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 3, background: P.greenBg, color: P.green, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>{vm.org ?? "We"} supplies — don&apos;t price</span>}
+                                </div>
+                                <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: q ? P.ink : P.ink3 }}>{q ?? (l.supplied ? "" : "one price")}</span>
+                                {edits && lon && (
+                                  <button type="button" onClick={() => edits.supplied(l.key, !l.supplied)} title="Who supplies the material" className="sc-no-print"
+                                    style={{ height: 22, padding: "0 7px", borderRadius: 3, fontFamily: disp, fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer",
+                                      border: `1px solid ${l.supplied ? P.green : P.hair}`, background: l.supplied ? P.greenBg : "#fff", color: l.supplied ? P.green : P.ink3, whiteSpace: "nowrap" }}>
+                                    {l.supplied ? `${vm.org ?? "We"} supplies` : "They price it"}
+                                  </button>
+                                )}
+                                {box && !narrow && box}
+                              </div>
+                              {box && narrow && <div style={{ marginTop: 6 }}>{box}</div>}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -238,6 +266,18 @@ export function BidDocument({ vm, edits, price, narrow }: {
             </section>
           );
         })}
+        {(vm.requirements?.length ?? 0) > 0 && (
+          <div style={{ borderTop: `1px solid ${P.hair}`, paddingTop: 10, marginTop: 4 }}>
+            <div style={kicker}>With your bid, send</div>
+            <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none" }}>
+              {vm.requirements!.map((r) => (
+                <li key={r} className="flex items-center gap-2" style={{ fontSize: 14, padding: "3px 0" }}>
+                  <span aria-hidden style={{ width: 14, height: 14, flex: "none", border: `1.5px solid ${P.ink3}`, borderRadius: 2 }} />{r}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       {view && <Viewer pics={view.pics} at={view.at} onClose={() => setView(null)} />}
     </div>

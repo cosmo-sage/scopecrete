@@ -16,7 +16,7 @@ import { BidDocument, lineQty, type DocScope } from "./bid-document";
 interface Bid {
   gone?: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
   price_mode?: "lump" | "per_item" | "their_rates"; price_by?: string | null; pour_date?: string | null;
-  scopes?: ShownScope[]; note?: string | null; address?: string | null; access?: string | null;
+  scopes?: ShownScope[]; note?: string | null; address?: string | null; access?: string | null; requirements?: string[];
   files?: Array<{ id: string; name: string; kind: string; url: string; section?: string | null }>; maps?: Record<string, string>; rates?: Record<string, number>;
   answer?: { at: string; total: number | null; lines: Array<{ key: string; price: number }> | null; note: string | null } | null;
 }
@@ -98,7 +98,7 @@ export function SharedBid({ token }: { token: string }) {
     <div style={{ minHeight: "100vh", background: C.paper, color: C.ink, fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 60px", display: "flex", flexDirection: "column", gap: 14 }}>
         {b.own && <div style={{ ...card, background: "#FFF6D6", fontSize: 13 }}>This is what the vendor sees. Opening it yourself isn&apos;t counted, and you can&apos;t answer it.</div>}
-        <BidDocument narrow={narrow} vm={{ org: b.org_name, jobTitle: b.job_title ?? null, forName: b.first_name, address: b.address, priceBy: b.price_by, pourDate: b.pour_date, note: b.note, scopes: docScopes }}
+        <BidDocument narrow={narrow} prices={perItem ? priced : undefined} vm={{ org: b.org_name, jobTitle: b.job_title ?? null, forName: b.first_name, address: b.address, priceBy: b.price_by, pourDate: b.pour_date, note: b.note, scopes: docScopes, requirements: b.requirements ?? [] }}
           price={perItem && !answered ? (l) => (
             <label style={{ display: "flex", alignItems: "center", gap: 4, width: narrow ? "100%" : 160, flex: "none" }}>
               <span style={{ fontSize: 13, color: C.ink3 }}>$</span>

@@ -29,7 +29,7 @@ const SCOPES = [
 test("the vendor's copy carries no cost, only what was ticked", () => {
   const s = shownScopes(SCOPES, { scopes: { a1: true }, lines: {}, supplied: {} });
   assert.equal(s.length, 1);
-  assert.deepEqual(Object.keys(s[0].lines[0]).sort(), ["key", "name", "qty", "supplied", "unit"]);
+  assert.deepEqual(Object.keys(s[0].lines[0]).sort(), ["group", "key", "name", "qty", "supplied", "unit"]);
   assert.equal(JSON.stringify(s).includes("168"), false);
   assert.equal(JSON.stringify(s).includes("2738"), false);
   assert.equal(s[0].lines[0].qty, 16.33);

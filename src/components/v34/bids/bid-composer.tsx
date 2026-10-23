@@ -24,7 +24,7 @@ import { Drawer, OrgNameContext } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { call } from "@/components/v34/cost-cards";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { bidText, defaultPick, laborVendor, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
+import { REQUIREMENTS, bidText, defaultPick, groupOf, laborVendor, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
 import { useWide } from "@/lib/v34/use-wide";
 import { BidDocument, type DocScope } from "@/components/v34/bids/bid-document";
 import { AreaMap, areaVisuals, mapPicture, type AreaVisual } from "@/components/v34/proposal/area-visuals";
@@ -100,6 +100,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const [priceBy, setPriceBy] = useState("");
   const [pour, setPour] = useState("");
   const [note, setNote] = useState("");
+  const [reqs, setReqs] = useState<string[]>([]);
+  const [reqOwn, setReqOwn] = useState("");
   const [follow, setFollow] = useState(true);
   const [pool, setPool] = useState<BidVendor[]>(start ?? []);
   const [who, setWho] = useState<Record<string, Ch>>(() => Object.fromEntries((start ?? []).map((v) => [v.id, defaultCh(v)])));
@@ -146,7 +148,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     const v = visuals[s.key];
     return {
       key: s.key, title: s.title, size: pk.quantities ? s.size : null, measure: pk.quantities ? s.measure ?? null : null, on: !!scopes[s.key],
-      lines: s.lines.map((l) => ({ key: l.id, name: l.name, qty: pk.quantities ? l.qty : null, unit: l.unit, supplied: supplied[l.id] ?? suppliedByDefault(l), on: lines[l.id] !== false })),
+      lines: s.lines.map((l) => ({ key: l.id, name: l.name, qty: pk.quantities ? l.qty : null, unit: l.unit, supplied: supplied[l.id] ?? suppliedByDefault(l), on: lines[l.id] !== false, group: groupOf(l.cost_type) })),
       map: v?.map ? <AreaMap map={v.map} height={150} /> : undefined,
     };
   }), [job, scopes, lines, supplied, pk.quantities, visuals]);
@@ -180,7 +182,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     try {
       const b = await call("/api/bid-requests", "POST", {
         job_id: jobId, pick: { scopes, lines, supplied }, maps: shown.filter((x) => visuals[x.key]?.map).map((x) => x.key), price_mode: mode, price_by: priceBy || null, pour_date: pour || null, note: note.trim() || null,
-        follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates },
+        follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates, requirements: reqs },
         recipients: picked.map((v) => ({ contact_id: v.id, channel: who[v.id] })),
       });
       const rows = b.recipients as Made[];
@@ -359,6 +361,17 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
             </div>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} placeholder="A note for them (optional)" aria-label="Note for the vendors"
               style={{ ...field, height: "auto", width: "100%", padding: 8, marginTop: 8 }} />
+            {/* What they send with the bid — ticked onto the page as "With your bid, send". */}
+            <div style={{ ...eyebrow, marginTop: 10, marginBottom: 4 }}>With their bid</div>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {[...REQUIREMENTS, ...reqs.filter((r) => !(REQUIREMENTS as readonly string[]).includes(r))].map((r) => {
+                const on = reqs.includes(r);
+                return <button key={r} onClick={() => setReqs(on ? reqs.filter((x) => x !== r) : [...reqs, r].slice(0, 8))} style={chip(on)}>{on ? "✓ " : ""}{r}</button>;
+              })}
+              <input value={reqOwn} onChange={(e) => setReqOwn(e.target.value)} placeholder="+ Your own" aria-label="Add something they send with the bid" maxLength={80}
+                onKeyDown={(e) => { const t = reqOwn.trim(); if (e.key === "Enter" && t) { e.preventDefault(); if (!reqs.some((x) => x.toLowerCase() === t.toLowerCase())) setReqs([...reqs, t].slice(0, 8)); setReqOwn(""); } }}
+                style={{ ...field, height: 28, width: 140 }} />
+            </div>
           </section>
 
           </div>
@@ -388,10 +401,11 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
                     scope: (k, on) => setScopeTicks((t) => ({ ...t, [k]: on })),
                     line: (k, on) => setLineTicks((t) => ({ ...t, [k]: on })),
                     supplied: (k, on) => setSupplied((t) => ({ ...t, [k]: on })),
+                    group: (keys, on) => setLineTicks((t) => ({ ...t, ...Object.fromEntries(keys.map((k) => [k, on])) })),
                   }} vm={{
                     org, jobTitle: job.title, forName: picked.length === 1 ? vname(picked[0]).split(/\s+/)[0] : null,
                     address: pk.address ? job.address : null, priceBy: pk.dates ? priceBy || null : null, pourDate: pk.dates ? pour || null : null,
-                    note: note.trim() || null, scopes: docScopes,
+                    note: note.trim() || null, scopes: docScopes, requirements: reqs,
                   }} />
                 </div>
               )}

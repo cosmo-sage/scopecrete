@@ -18,7 +18,7 @@ import { Drawer } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { BidComposer, chip } from "@/components/v34/bids/bid-composer";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
+import { GROUP_LABEL, budgetUnitCost, compareBids, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
 
 interface Rec {
   id: string; contact_id: string; name: string; url: string; sent_at: string | null; opened_at: string | null; view_count: number;
@@ -81,7 +81,7 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
             })}
           </div>
         ))}
-      {openReq && <RequestSheet req={openReq} onClose={() => setOpenId(null)} onChanged={() => setTick((n) => n + 1)} />}
+      {openReq && <RequestSheet jobId={jobId} req={openReq} onClose={() => setOpenId(null)} onChanged={() => setTick((n) => n + 1)} />}
       {composing && <BidComposer open jobId={jobId} from="Started from the job" onClose={() => setComposing(false)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />}
     </section>
   );
@@ -93,7 +93,7 @@ interface Resend { phone: string | null; email: string | null; url: string; text
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
 
-function RequestSheet({ req, onClose, onChanged }: { req: Req; onClose: () => void; onChanged: () => void }) {
+function RequestSheet({ jobId, req, onClose, onChanged }: { jobId: string; req: Req; onClose: () => void; onChanged: () => void }) {
   const [info, setInfo] = useState<Record<string, Resend | { error: string }>>({});
   const [live, setLive] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -135,6 +135,7 @@ function RequestSheet({ req, onClose, onChanged }: { req: Req; onClose: () => vo
         <div style={{ fontSize: F.sm, color: T.ink2 }}>
           {req.scopes.map((s) => `${s.title}${s.size ? ` (${s.size})` : ""}`).join(" · ")}{req.price_by ? ` · price by ${day(`${req.price_by}T12:00:00`)}` : ""}
         </div>
+        {req.recipients.some((x) => x.answered_at && !x.revoked_at) && <CompareBids jobId={jobId} req={req} />}
         {req.recipients.map((x) => {
           const r = info[x.id];
           const ok = r && !("error" in r) ? r : null;
@@ -168,5 +169,139 @@ function RequestSheet({ req, onClose, onChanged }: { req: Req; onClose: () => vo
         })}
       </div>
     </Drawer>
+  );
+}
+
+// ------------------------------------------------------------------ side by side
+
+/**
+ * The answers side by side (Claude Design "Bid requests" 1f): every line with each vendor's price per
+ * unit and what it comes to, a missing price red, a price under 60% of the others' marked LOW; each
+ * section's total per vendor, tapped to pick that vendor for it (the cheapest complete one to start); and
+ * **Fill the budget** — the picked vendors' prices become those lines' unit costs on the Proposed budget,
+ * on Coy's two taps. Nothing is written before that.
+ */
+function CompareBids({ jobId, req }: { jobId: string; req: Req }) {
+  const answered = req.recipients.filter((x) => x.answered_at && !x.revoked_at);
+  const cmp = React.useMemo(() => compareBids(req.scopes, answered.map((x) => ({
+    id: x.id, name: x.name, lines: x.price_lines, total: x.price_total !== null ? Number(x.price_total) : null,
+  }))), [req.scopes, answered]);
+  const [picks, setPicks] = useState<Record<string, number>>(() =>
+    Object.fromEntries(cmp.sections.filter((s) => s.low !== null).map((s) => [s.key, s.low as number])));
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
+  const wide = cmp.vendors.length;
+  const chosen = cmp.sections.filter((s) => picks[s.key] !== undefined && s.totals[picks[s.key]] !== null);
+  const pickTotal = chosen.reduce((t, s) => t + (s.totals[picks[s.key]] ?? 0), 0);
+  const nLines = chosen.reduce((t, s) => t + s.lines.filter((l) => l.cells[picks[s.key]].unit !== null).length, 0);
+
+  const fill = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      // The budget lines' own quantities, for a line sent with no quantity (days, one price).
+      const job = await call(`/api/bid-requests/compose?job=${jobId}`, "GET").catch(() => null);
+      const qty = new Map<string, number | null>(((job?.job?.scopes ?? []) as Array<{ lines: Array<{ id: string; qty: number | null }> }>).flatMap((s) => s.lines.map((l) => [l.id, l.qty] as [string, number | null])));
+      let done = 0, gone = 0;
+      for (const s of chosen) {
+        const i = picks[s.key];
+        for (const l of s.lines) {
+          const u = l.cells[i].unit;
+          if (u === null) continue;
+          try { await call(`/api/jobs/${jobId}/budget/lines/${l.key}`, "PATCH", { unit_cost: budgetUnitCost(l, u, qty.get(l.key) ?? null) }); done += 1; } catch { gone += 1; }
+        }
+      }
+      setMsg({ text: `${done} budget line${done === 1 ? "" : "s"} now carry the picked vendors' prices${gone ? ` · ${gone} couldn't be changed (taken off the budget since)` : ""}. Open the Proposed budget to see them.`, bad: done === 0 });
+      setAsking(false);
+    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), bad: true }); } finally { setBusy(false); }
+  };
+
+  const th: React.CSSProperties = { padding: "6px 8px", fontSize: F.xs, textAlign: "right", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` };
+  const td: React.CSSProperties = { padding: "5px 8px", fontSize: F.xs, textAlign: "right", whiteSpace: "nowrap", borderTop: `1px solid ${T.hairSoft}`, ...nums };
+  const first: React.CSSProperties = { textAlign: "left", position: "sticky", left: 0, background: T.card, zIndex: 1, minWidth: 180, maxWidth: 260, whiteSpace: "normal" };
+  return (
+    <section style={{ background: T.card, border: `1px solid ${T.hair}`, borderRadius: 4 }}>
+      <div className="flex items-baseline gap-2 px-3 pt-2.5 pb-1">
+        <span style={eyebrow}>Side by side</span>
+        <span style={{ fontSize: F.xs, color: T.ink3, flex: 1 }}>Tap a section&apos;s total to pick that vendor for it</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: 260 + wide * 130 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, ...first, zIndex: 2 }}>Line</th>
+              <th style={th}>Qty</th>
+              {cmp.vendors.map((v, i) => <th key={v.id} style={{ ...th, fontWeight: 700, color: T.ink }}>{v.name}{!cmp.perLine[i] ? <div style={{ fontWeight: 400, color: T.ink3 }}>one number</div> : null}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {cmp.sections.map((s) => {
+              let lastGroup: string | null = null;
+              return (
+                <React.Fragment key={s.key}>
+                  <tr>
+                    <td colSpan={2} style={{ ...td, ...first, background: T.sunk, fontWeight: 700, fontSize: F.sm, color: T.ink }}>{s.title}{s.size ? <span style={{ fontWeight: 400, color: T.ink3 }}> · {s.size}</span> : null}</td>
+                    {cmp.vendors.map((v, i) => {
+                      const t = s.totals[i], on = picks[s.key] === i;
+                      return (
+                        <td key={v.id} style={{ ...td, background: on ? T.hivizDim : T.sunk, padding: 0 }}>
+                          <button disabled={t === null} onClick={() => setPicks({ ...picks, [s.key]: i })} title={t === null ? undefined : `Pick ${v.name} for ${s.title}`}
+                            style={{ width: "100%", padding: "6px 8px", textAlign: "right", fontWeight: 700, fontSize: F.sm, color: t === null ? T.ink3 : T.ink, cursor: t === null ? "default" : "pointer", background: "none", border: on ? `1.5px solid ${T.hiviz}` : "1.5px solid transparent", ...nums }}>
+                            {on ? "✓ " : ""}{t === null ? "—" : money(t)}
+                            {t !== null && !s.full[i] && <div style={{ fontWeight: 400, fontSize: 10.5, color: T.red }}>not every line</div>}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {s.lines.map((l) => {
+                    const band = l.group && l.group !== lastGroup ? l.group : null;
+                    lastGroup = l.group;
+                    return (
+                      <React.Fragment key={l.key}>
+                        {band && <tr><td colSpan={2 + wide} style={{ ...td, ...first, maxWidth: "none", fontFamily: "var(--sc-font-disp)", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3, fontSize: 10.5 }}>{GROUP_LABEL[band]}</td></tr>}
+                        <tr>
+                          <td style={{ ...td, ...first, color: l.supplied ? T.ink3 : T.ink }}>{l.name}{l.supplied ? " · we supply" : ""}</td>
+                          <td style={{ ...td, color: T.ink3 }}>{l.qty !== null ? `${l.qty.toLocaleString("en-US")} ${l.unit ?? ""}` : "one price"}</td>
+                          {l.cells.map((c, i) => (
+                            <td key={i} style={{ ...td, background: c.missing ? T.redDim : c.low ? T.hivizDim : undefined }}>
+                              {c.unit === null ? <span style={{ color: c.missing ? T.red : T.ink3 }}>{c.missing ? "missing" : l.supplied ? "" : "—"}</span> : (
+                                <>
+                                  <div style={{ fontWeight: 600 }}>{money(c.ext as number)}{c.low && <span style={{ marginLeft: 4, fontSize: 9.5, fontWeight: 700, color: T.hivizText }}>LOW</span>}</div>
+                                  {l.qty !== null && <div style={{ color: T.ink3, fontSize: 10.5 }}>{money(c.unit)}/{l.unit ?? "ea"}</div>}
+                                </>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      </React.Fragment>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+            <tr>
+              <td colSpan={2} style={{ ...td, ...first, fontWeight: 700, fontSize: F.sm, borderTop: `2px solid ${T.ink}` }}>Whole bid</td>
+              {cmp.totals.map((t, i) => <td key={i} style={{ ...td, fontWeight: 700, fontSize: F.sm, borderTop: `2px solid ${T.ink}`, color: cmp.low === i ? T.green : T.ink }}>{t === null ? "—" : money(t)}{cmp.low === i ? " · low" : ""}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap px-3 py-2.5" style={{ borderTop: `1px solid ${T.hair}` }}>
+        <span style={{ fontSize: F.sm, flex: 1, minWidth: 180 }}>
+          {chosen.length ? <>Your picks: <b style={nums}>{money(pickTotal)}</b> · {chosen.map((s) => `${s.title} → ${cmp.vendors[picks[s.key]].name}`).join(" · ")}</> : "No section priced by line yet — a one-number bid can't fill budget lines."}
+        </span>
+        {asking ? (
+          <>
+            <span style={{ fontSize: F.xs, color: T.ink2 }}>Their prices become the unit cost on {nLines} budget line{nLines === 1 ? "" : "s"}.</span>
+            <button disabled={busy} onClick={() => void fill()} style={{ ...chip(true, busy), background: T.hiviz, borderColor: T.hiviz, color: T.onHiviz }}>{busy ? "Filling…" : "Yes, fill them"}</button>
+            <button onClick={() => setAsking(false)} style={chip(false)}>Not yet</button>
+          </>
+        ) : (
+          <button disabled={!nLines} onClick={() => setAsking(true)} style={chip(true, !nLines)}>Fill the Proposed budget</button>
+        )}
+      </div>
+      {msg && <div className="px-3 pb-2.5" style={{ fontSize: F.xs, color: msg.bad ? T.red : T.green }}>{msg.text}</div>}
+    </section>
   );
 }

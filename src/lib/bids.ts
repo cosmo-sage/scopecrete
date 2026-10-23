@@ -9,7 +9,11 @@
  *  - bidText() / bidEmail(): the words that go with each vendor's link;
  *  - priorRates(): "their rates" — the price per unit they gave last time for
  *    a line of the same name and unit;
- *  - answerTotal(): what a price per line adds up to.
+ *  - answerTotal(): what a price per line adds up to;
+ *  - groupLines() / groupOf(): a section's lines as Labor · Materials · Equipment, like the Budget;
+ *  - cleanRequirements(): what they're asked to send with the bid (insurance, W-9 …);
+ *  - compareBids(): the answers side by side — missing and low prices, each section's cheapest;
+ *  - budgetUnitCost(): a vendor's price as the budget line's unit cost.
  */
 
 export const TRADES = [
@@ -68,8 +72,33 @@ export interface ComposeLine { id: string; name: string; unit: string | null; qt
 export interface Measure { sf: number | null; lf: number | null; count: number | null; count_unit: string | null; depth_in: number | null; concrete: boolean }
 export interface ComposeScope { key: string; title: string; size: string | null; measure?: Measure | null; lines: ComposeLine[] }
 
+/**
+ * A line's group on the bid, as on the Budget (Claude Design "Bid requests", 2026-10-23): Labor ·
+ * Materials · Equipment, anything else Other. Read from the budget line's cost type.
+ */
+export type BidGroup = "labor" | "materials" | "equipment" | "other";
+export const GROUP_ORDER: BidGroup[] = ["labor", "materials", "equipment", "other"];
+export const GROUP_LABEL: Record<BidGroup, string> = { labor: "Labor", materials: "Materials", equipment: "Equipment", other: "Other" };
+export const groupOf = (costType: string | null | undefined): BidGroup =>
+  costType === "labor" ? "labor" : costType === "material" || costType === "materials" ? "materials" : costType === "equipment" ? "equipment" : "other";
+
+/**
+ * A section's lines in their groups, Labor · Materials · Equipment · Other, each group's lines in their
+ * own order. Lines sent before groups (no `group`) come back as one group with no name.
+ */
+export function groupLines<L extends { group?: BidGroup | null }>(lines: L[]): Array<{ group: BidGroup | null; lines: L[] }> {
+  if (!lines.some((l) => l.group)) return lines.length ? [{ group: null, lines }] : [];
+  return GROUP_ORDER.map((g) => ({ group: g as BidGroup | null, lines: lines.filter((l) => (l.group ?? "other") === g) })).filter((x) => x.lines.length > 0);
+}
+
+/** A group's tick from its lines' ticks: all in, some, or none. */
+export function groupState(keys: string[], on: (key: string) => boolean): "all" | "some" | "none" {
+  const n = keys.filter(on).length;
+  return n === 0 ? "none" : n === keys.length ? "all" : "some";
+}
+
 /** What the vendor sees. */
-export interface ShownLine { key: string; name: string; qty: number | null; unit: string | null; supplied: boolean }
+export interface ShownLine { key: string; name: string; qty: number | null; unit: string | null; supplied: boolean; group?: BidGroup }
 export interface ShownScope { key: string; title: string; size: string | null; measure?: Measure | null; lines: ShownLine[] }
 
 /**
@@ -195,11 +224,32 @@ export function shownScopes(scopes: ComposeScope[], pick: ScopePick): ShownScope
         qty: time || pick.quantities === false || l.qty === null || !Number.isFinite(Number(l.qty)) ? null : Math.round(Number(l.qty) * 100) / 100,
         unit: time || !l.unit ? null : String(l.unit).slice(0, 20),
         supplied: pick.supplied?.[l.id] ?? suppliedByDefault(l),
+        group: groupOf(l.cost_type),
       });
     }
     const measure = pick.quantities === false ? null : cleanMeasure(s.measure);
     // A section shows with what it measures even with none of its lines ticked (a labor sub prices the slab).
     if (lines.length || measure) out.push({ key: s.key.slice(0, 80), title: s.title.slice(0, 120), size: pick.quantities === false ? null : s.size ? s.size.slice(0, 80) : null, measure, lines });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- what to send with it
+
+/** The requirements offered as chips (the design's "With your bid"). Coy may type his own. */
+export const REQUIREMENTS = ["Insurance certificate", "W-9", "1-year workmanship warranty", "Price good for 30 days"] as const;
+
+/** What the vendor is asked to send with their bid: trimmed, 80 characters, no repeats, 8 at most. */
+export function cleanRequirements(v: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(v) ? v : []) {
+    if (typeof x !== "string") continue;
+    const t = x.replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!t || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+    if (out.length >= 8) break;
   }
   return out;
 }
@@ -291,4 +341,73 @@ export function answerTotal(lines: ShownLine[], prices: Record<string, number | 
     t += (isTimeUnit(l.unit) ? 1 : l.qty ?? 1) * p;
   }
   return any ? Math.round(t * 100) / 100 : null;
+}
+
+/** What one priced line comes to: qty × price, or the price once when no quantity was shown (days, one price). */
+export const lineExt = (l: Pick<ShownLine, "qty" | "unit">, price: number) => Math.round((isTimeUnit(l.unit) || l.qty === null ? 1 : l.qty) * price * 100) / 100;
+
+// ---------------------------------------------------------------- compare
+
+export interface CompareInput { id: string; name: string; lines: PriceLine[] | null; total: number | null }
+export interface CompareCell { unit: number | null; ext: number | null; missing: boolean; low: boolean }
+export interface CompareLine { key: string; name: string; qty: number | null; unit: string | null; group: BidGroup | null; supplied: boolean; cells: CompareCell[] }
+export interface CompareSection { key: string; title: string; size: string | null; lines: CompareLine[]; totals: Array<number | null>; full: boolean[]; low: number | null }
+export interface Comparison { vendors: CompareInput[]; sections: CompareSection[]; totals: Array<number | null>; low: number | null; perLine: boolean[] }
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null;
+};
+
+/**
+ * The bids side by side (Claude Design "Bid requests" 1f): for each line every vendor's price per unit
+ * and what it comes to; a line nobody of theirs priced is **missing** (only for a vendor who priced by
+ * line); a price under 60% of the median of the others' on that line is **low**. Each section's total
+ * per vendor and whether they priced all of it; the whole bid per vendor (their lines added up, else the
+ * one number they sent). `low` is the index of the cheapest complete total.
+ */
+export function compareBids(scopes: ShownScope[], vendors: CompareInput[]): Comparison {
+  const perLine = vendors.map((v) => !!v.lines?.length);
+  const priceOf = vendors.map((v) => new Map((v.lines ?? []).filter((x) => x.key && Number.isFinite(x.price)).map((x) => [x.key as string, Number(x.price)])));
+  const cheapest = (vals: Array<number | null>, ok: boolean[]) => {
+    let best: number | null = null;
+    vals.forEach((t, i) => { if (t !== null && ok[i] && (best === null || t < (vals[best] as number))) best = i; });
+    return best;
+  };
+  const sections: CompareSection[] = scopes.map((s) => {
+    const lines: CompareLine[] = s.lines.map((l) => {
+      const units = priceOf.map((m) => (l.supplied ? null : m.get(l.key) ?? null));
+      const cells = units.map((u, i) => {
+        const others = units.filter((x, j) => j !== i && x !== null) as number[];
+        const med = median(others);
+        return { unit: u, ext: u === null ? null : lineExt(l, u), missing: !l.supplied && perLine[i] && u === null, low: u !== null && med !== null && med > 0 && u < 0.6 * med };
+      });
+      return { key: l.key, name: l.name, qty: l.qty, unit: l.unit, group: l.group ?? null, supplied: l.supplied, cells };
+    });
+    const totals = vendors.map((_, i) => {
+      if (!perLine[i]) return null;
+      const xs = lines.map((l) => l.cells[i].ext).filter((x): x is number => x !== null);
+      return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+    });
+    const full = vendors.map((_, i) => perLine[i] && lines.every((l) => l.supplied || l.cells[i].unit !== null));
+    return { key: s.key, title: s.title, size: s.size, lines, totals, full, low: cheapest(totals, full) };
+  });
+  const totals = vendors.map((v, i) => {
+    if (perLine[i]) {
+      const xs = sections.map((s) => s.totals[i]).filter((x): x is number => x !== null);
+      return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100 : v.total;
+    }
+    return v.total;
+  });
+  const whole = vendors.map((_, i) => !perLine[i] || sections.every((s) => s.full[i]));
+  return { vendors, sections, totals, low: cheapest(totals, whole), perLine };
+}
+
+/**
+ * The budget's unit cost from a vendor's price on a line: their price per unit as it is, or — for a line
+ * sent with no quantity (days, one price) — their one price spread over the budget line's own quantity.
+ */
+export function budgetUnitCost(l: Pick<ShownLine, "qty" | "unit">, price: number, budgetQty: number | null): number {
+  if (!isTimeUnit(l.unit) && l.qty !== null) return price;
+  return budgetQty && budgetQty > 0 ? Math.round((price / budgetQty) * 10000) / 10000 : price;
 }

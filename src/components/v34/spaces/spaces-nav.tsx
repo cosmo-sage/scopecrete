@@ -1911,6 +1911,11 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           </div>
         );
       })}
+      <Tile label="New job" title="New job" href="/dashboard/jobs/new" dashed>
+        <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 3.5h6v2H7zM5.5 4.5H4.5v13h11v-13h-1M10 9v6M7 12h6" />
+        </svg>
+      </Tile>
       <Tile label="+" title="New Work Space" onPick={() => setMaking(true)} dashed drag={drag ? slotProps("end", null) : undefined}>
         <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
       </Tile>

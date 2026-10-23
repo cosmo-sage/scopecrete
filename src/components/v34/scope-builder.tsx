@@ -105,7 +105,7 @@ export function ScopeBuilderPage() {
         actions={<>
           <SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />
           {/* Back on the header (Coy, 2026-10-22: "the add new job button doesn't make a clear path"). */}
-          <Link href="/dashboard/scope?new=1" className="sc-new-btn rounded inline-flex items-center"
+          <Link href="/dashboard/jobs/new" className="sc-new-btn rounded inline-flex items-center"
             style={{ height: 32, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontSize: F.sm, fontWeight: 600, whiteSpace: "nowrap" }}>
             + New job
           </Link>

@@ -16,16 +16,16 @@ import { T, F, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens"
 import { call } from "@/components/v34/cost-cards";
 import { Drawer } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
-import { BidComposer, chip } from "@/components/v34/bids/bid-composer";
+import { BidComposer, chip, type EditBid } from "@/components/v34/bids/bid-composer";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { GROUP_LABEL, budgetUnitCost, compareBids, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
+import { GROUP_LABEL, answeredBeforeEdit, budgetUnitCost, compareBids, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
 
 interface Rec {
   id: string; contact_id: string; name: string; url: string; sent_at: string | null; opened_at: string | null; view_count: number;
   answered_at: string | null; price_total: number | null; price_lines: PriceLine[] | null; answer_note: string | null; revoked_at: string | null;
   sent_via?: string[] | null; last_viewed_at?: string | null;
 }
-interface Req { id: string; price_mode: string; price_by: string | null; scopes: ShownScope[]; created_at: string; recipients: Rec[] }
+interface Req { id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[]; created_at: string; edited_at: string | null; packet: EditBid["packet"]; recipients: Rec[] }
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const lineSum = (ls: PriceLine[] | null) => (ls ?? []).reduce((t, l) => t + (l.qty ?? 1) * l.price, 0);
@@ -38,6 +38,7 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
   const [tick, setTick] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
   const openReq = reqs?.find((r) => r.id === openId) ?? null;
+  const [editing, setEditing] = useState<Req | null>(null);
   useEffect(() => {
     let off = false;
     call(`/api/bid-requests?job=${jobId}`, "GET").then((b) => { if (!off) { setReqs(b.requests as Req[]); setMissing(b.missing ?? null); } }).catch(() => { if (!off) setReqs([]); });
@@ -63,9 +64,9 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
             className="mt-2 pt-2" style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }} title="Open this bid request">
             <div className="flex items-baseline gap-2">
               <div style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 0, ...clip }}>
-                {day(r.created_at)} · {r.scopes.map((s) => s.title).join(" · ")}{r.price_by ? ` · price by ${day(`${r.price_by}T12:00:00`)}` : ""}
+                {day(r.created_at)}{r.edited_at ? ` · edited ${day(r.edited_at)}` : ""} · {r.scopes.map((s) => s.title).join(" · ")}{r.price_by ? ` · price by ${day(`${r.price_by}T12:00:00`)}` : ""}
               </div>
-              <span style={{ fontSize: F.xs, color: T.chalk, fontWeight: 600, whiteSpace: "nowrap" }}>Status · Resend ›</span>
+              <span style={{ fontSize: F.xs, color: T.chalk, fontWeight: 600, whiteSpace: "nowrap" }}>Status · Edit ›</span>
             </div>
             {[...r.recipients].sort((a, b) => Number(!!b.answered_at) - Number(!!a.answered_at) || (a.price_total ?? Infinity) - (b.price_total ?? Infinity)).map((x) => {
               const total = x.price_total !== null ? Number(x.price_total) : x.price_lines ? lineSum(x.price_lines) : null;
@@ -81,7 +82,9 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
             })}
           </div>
         ))}
-      {openReq && <RequestSheet jobId={jobId} req={openReq} onClose={() => setOpenId(null)} onChanged={() => setTick((n) => n + 1)} />}
+      {openReq && <RequestSheet jobId={jobId} req={openReq} onClose={() => setOpenId(null)} onChanged={() => setTick((n) => n + 1)} onEdit={() => { setEditing(openReq); setOpenId(null); }} />}
+      {editing && <BidComposer open jobId={jobId} edit={{ ...editing, recipients: editing.recipients.map((x) => ({ contact_id: x.contact_id, name: x.name, answered_at: x.answered_at, revoked_at: x.revoked_at })) }}
+        onClose={() => setEditing(null)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />}
       {composing && <BidComposer open jobId={jobId} from="Started from the job" onClose={() => setComposing(false)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />}
     </section>
   );
@@ -93,7 +96,7 @@ interface Resend { phone: string | null; email: string | null; url: string; text
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
 
-function RequestSheet({ jobId, req, onClose, onChanged }: { jobId: string; req: Req; onClose: () => void; onChanged: () => void }) {
+function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: string; req: Req; onClose: () => void; onChanged: () => void; onEdit: () => void }) {
   const [info, setInfo] = useState<Record<string, Resend | { error: string }>>({});
   const [live, setLive] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -132,6 +135,10 @@ function RequestSheet({ jobId, req, onClose, onChanged }: { jobId: string; req: 
   return (
     <Drawer open onClose={onClose} title="Bid request" sub={`${day(req.created_at)} · ${req.recipients.length} vendor${req.recipients.length === 1 ? "" : "s"}`} wide>
       <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 760 }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 160 }}>{req.edited_at ? `Edited ${when(req.edited_at)} — every link shows the new version.` : "Change what's on it, the dates or who gets it — every vendor keeps their link."}</span>
+          <button onClick={onEdit} style={{ ...chip(true), height: 32, padding: "0 14px" }}>✎ Edit bid request</button>
+        </div>
         <div style={{ fontSize: F.sm, color: T.ink2 }}>
           {req.scopes.map((s) => `${s.title}${s.size ? ` (${s.size})` : ""}`).join(" · ")}{req.price_by ? ` · price by ${day(`${req.price_by}T12:00:00`)}` : ""}
         </div>
@@ -154,6 +161,7 @@ function RequestSheet({ jobId, req, onClose, onChanged }: { jobId: string; req: 
                 ok.delivered ? `Delivered to ${formatPhone(ok.delivered.to ?? "")} ✓ ${when(ok.delivered.at)}` : "No delivered text from Quo yet — check their number before resending",
                 ok.delivered ? T.green : T.sun)}
               {line(x.opened_at ? `Opened ${x.view_count || 1} time${(x.view_count || 1) === 1 ? "" : "s"} · first ${when(x.opened_at)}${x.last_viewed_at && x.view_count > 1 ? ` · last ${when(x.last_viewed_at)}` : ""}` : "Not opened yet")}
+              {answeredBeforeEdit(x.answered_at, req.edited_at) && line("Answered before your last edit — their price is for the earlier version.", T.sun)}
               {x.answered_at && line(`Answered ${when(x.answered_at)}${x.sent_at ? ` (in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)})` : ""}${x.answer_note ? ` — “${x.answer_note}”` : ""}`, T.green)}
               {r && "error" in r && line(r.error, T.red)}
               {live[x.id] && line(live[x.id], live[x.id].startsWith("Delivered") ? T.green : live[x.id].startsWith("Text failed") || live[x.id].startsWith("Quo took") ? T.red : T.ink)}

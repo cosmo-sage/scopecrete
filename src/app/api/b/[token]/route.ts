@@ -23,7 +23,7 @@ const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
 interface Shared {
   gone: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
   price_mode?: string; price_by?: string | null; pour_date?: string | null; scopes?: unknown; note?: string | null;
-  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string; section?: string | null }>; maps?: Record<string, string>; requirements?: unknown };
+  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string; section?: string | null }>; maps?: Record<string, string>; requirements?: unknown; edited_at?: unknown };
   rates?: Record<string, number> | null; answer?: unknown;
 }
 
@@ -52,6 +52,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, section: f.section ?? null, url: url.get(f.path) ?? null })).filter((f) => f.url),
     maps: Object.fromEntries(maps.map(([k, p]) => [k, url.get(p) ?? null]).filter(([, u]) => u)),
     rates: r.rates ?? {}, answer: r.answer ?? null,
+    edited_at: typeof r.packet?.edited_at === "string" ? r.packet.edited_at : null,
   });
 }
 

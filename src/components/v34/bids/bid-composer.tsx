@@ -18,13 +18,13 @@
  * mail app, one tap per vendor (§10: ScopeCrete sends no email).
  */
 
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { Drawer, OrgNameContext } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { call } from "@/components/v34/cost-cards";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { REQUIREMENTS, bidText, defaultPick, groupOf, laborVendor, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
+import { REQUIREMENTS, bidText, defaultPick, groupOf, laborVendor, pickFromShown, shownScopes, suppliedByDefault, type ComposeScope, type ShownScope } from "@/lib/bids";
 import { useWide } from "@/lib/v34/use-wide";
 import { BidDocument, type DocScope } from "@/components/v34/bids/bid-document";
 import { AreaMap, areaVisuals, mapPicture, type AreaVisual } from "@/components/v34/proposal/area-visuals";
@@ -39,7 +39,13 @@ interface JobLite { id: string; title: string | null; address: string | null; st
 interface PacketFile { id: string; name: string; kind: "photo" | "plan" | "aerial"; section?: string | null }
 interface ComposeJob { id: string; title: string | null; address: string | null; street: string | null; scopes: ComposeScope[]; files: PacketFile[]; access: string | null }
 type Ch = "text" | "email" | "both";
-interface Made { id: string; contact_id: string; name: string | null; phone: string | null; email: string | null; channel: Ch; url: string; text: string; email_parts: { subject: string; body: string } }
+interface Made { id: string; contact_id: string; name: string | null; phone: string | null; email: string | null; channel: Ch; url: string; text: string; email_parts: { subject: string; body: string }; new?: boolean }
+/** A request already sent, opened to edit (migration 124): its job, ticks, packet and words. */
+export interface EditBid {
+  id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[];
+  packet: { address?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; kind: string }>; requirements?: string[] } | null;
+  recipients: Array<{ contact_id: string; name: string; answered_at: string | null; revoked_at: string | null }>;
+}
 
 const vname = (v: Pick<BidVendor, "name" | "company_name" | "phone">) => v.name?.trim() || v.company_name || formatPhone(v.phone) || "Vendor";
 const MODES: Array<[string, string, string]> = [
@@ -71,7 +77,7 @@ export const chip = (on: boolean, dis?: boolean): React.CSSProperties => ({
 });
 const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.sm, borderRadius: 3, padding: "0 8px" };
 
-export function BidComposer({ open, onClose, vendors: start, jobId: startJob, from, onDone }: {
+export function BidComposer({ open, onClose, vendors: start, jobId: startJob, from, onDone, edit }: {
   open: boolean; onClose: () => void;
   /** Vendors already picked (the Vendors page's selection). */
   vendors?: BidVendor[];
@@ -80,11 +86,13 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   /** "Started from Vendors · 3 flatwork subs" */
   from?: string;
   onDone?: (msg: string) => void;
+  /** A request already sent — the composer opens on it, and Save changes it in place, every link kept. */
+  edit?: EditBid;
 }) {
   const org = useContext(OrgNameContext);
   const [jobs, setJobs] = useState<JobLite[] | null>(null);
   const [jobQ, setJobQ] = useState("");
-  const [jobId, setJobId] = useState<string | null>(startJob ?? null);
+  const [jobId, setJobId] = useState<string | null>(edit?.job_id ?? startJob ?? null);
   const [job, setJob] = useState<ComposeJob | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Coy's ticks over the starting pick (defaultPick), so the pick follows the vendors until he changes it.
@@ -94,13 +102,23 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const [visuals, setVisuals] = useState<Record<string, AreaVisual>>({});
   const [wideRef, wide] = useWide<HTMLDivElement>(1060);
   const [supplied, setSupplied] = useState<Record<string, boolean>>({});
-  const [pk, setPk] = useState({ address: true, dates: true, quantities: true, photos: true, aerial: true });
+  const [pk, setPk] = useState(() => {
+    const p = edit?.packet;
+    if (!p) return { address: true, dates: true, quantities: true, photos: true, aerial: true };
+    const kinds = new Set((p.files ?? []).map((f) => f.kind));
+    return { address: p.address != null, dates: p.dates !== false, quantities: p.quantities !== false, photos: kinds.has("photo"), aerial: kinds.has("aerial") };
+  });
   const [plans, setPlans] = useState<Record<string, boolean>>({});
-  const [mode, setMode] = useState("lump");
-  const [priceBy, setPriceBy] = useState("");
-  const [pour, setPour] = useState("");
-  const [note, setNote] = useState("");
-  const [reqs, setReqs] = useState<string[]>([]);
+  const [mode, setMode] = useState(edit?.price_mode ?? "lump");
+  const [priceBy, setPriceBy] = useState(edit?.price_by ?? "");
+  const [pour, setPour] = useState(edit?.pour_date ?? "");
+  const [note, setNote] = useState(edit?.note ?? "");
+  const [reqs, setReqs] = useState<string[]>(edit?.packet?.requirements ?? []);
+  // Editing: the vendors already on it keep their link; tell them it changed (a text each, this tap).
+  const already = useMemo(() => (edit?.recipients ?? []).filter((r) => !r.revoked_at), [edit]);
+  const [tellOld, setTellOld] = useState(true);
+  // The request as opened — read once when its job loads (the parent passes a new object each render).
+  const editRef = useRef(edit);
   const [reqOwn, setReqOwn] = useState("");
   const [follow, setFollow] = useState(true);
   const [pool, setPool] = useState<BidVendor[]>(start ?? []);
@@ -130,6 +148,14 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       // Every scope with lines ticked; materials supplied by default (suppliedByDefault); every plan in.
       setScopeTicks({}); setLineTicks({}); setSupplied({}); setVisuals({});
       setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, true])));
+      const edit = editRef.current;
+      if (edit && edit.job_id === j.id) {
+        // Open on what was sent: its sections, lines, who supplies and its plans.
+        const was = pickFromShown(j.scopes, edit.scopes ?? []);
+        setScopeTicks(was.scopes); setLineTicks(was.lines); setSupplied(was.supplied); setLaborPick(false);
+        const sent = new Set((edit.packet?.files ?? []).map((f) => f.id));
+        setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, sent.has(f.id)])));
+      }
       // Each section's takeoffs on its sheet, drawn like the proposal's.
       call(`/api/jobs/${j.id}/plans`, "GET").then((d: PlansData) => { if (!off) setVisuals(areaVisuals(d, j.scopes.map((s) => s.key))); }).catch(() => {});
     }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
@@ -157,9 +183,9 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const texts = picked.filter((v) => who[v.id] !== "email" && v.phone).length;
   const emails = picked.filter((v) => who[v.id] !== "text" && v.email).length;
   // Suggestions from the job door: subs first, best responders first.
-  const suggest = useMemo(() => pool.filter((v) => !who[v.id] && (!find.trim() || [v.name, v.company_name, ...(v.trades ?? [])].some((x) => (x ?? "").toLowerCase().includes(find.trim().toLowerCase()))))
+  const suggest = useMemo(() => pool.filter((v) => !who[v.id] && !already.some((r) => r.contact_id === v.id) && (!find.trim() || [v.name, v.company_name, ...(v.trades ?? [])].some((x) => (x ?? "").toLowerCase().includes(find.trim().toLowerCase()))))
     .sort((a, b) => Number(b.subtype === "subcontractor") - Number(a.subtype === "subcontractor") || (b.bids?.answered ?? 0) - (a.bids?.answered ?? 0) || vname(a).localeCompare(vname(b)))
-    .slice(0, 8), [pool, who, find]);
+    .slice(0, 8), [pool, who, find, already]);
   const tradeHint = useMemo(() => {
     const t = new Set(picked.flatMap((v) => v.trades ?? []));
     return t.size ? [...t].slice(0, 3).join(", ") : null;
@@ -180,7 +206,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     if (!jobId) return;
     setBusy(true); setErr(null);
     try {
-      const b = await call("/api/bid-requests", "POST", {
+      const b = await call(edit ? `/api/bid-requests/${edit.id}` : "/api/bid-requests", edit ? "PATCH" : "POST", {
         job_id: jobId, pick: { scopes, lines, supplied }, maps: shown.filter((x) => visuals[x.key]?.map).map((x) => x.key), price_mode: mode, price_by: priceBy || null, pour_date: pour || null, note: note.trim() || null,
         follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates, requirements: reqs },
         recipients: picked.map((v) => ({ contact_id: v.id, channel: who[v.id] })),
@@ -199,6 +225,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       let sentN = 0;
       for (const r of rows) {
         if (r.channel === "email") continue;
+        if (r.new === false && !tellOld) { st[r.id] = "Not told — same link, it shows the changes"; continue; }
         if (!r.phone) { st[r.id] = "No phone — email it"; continue; }
         st[r.id] = "Texting…"; setStatus({ ...st });
         try {
@@ -213,6 +240,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
         setStatus({ ...st });
       }
       const n = sentN;
+      if (edit) { onDone?.(`Bid request updated · every link shows the changes${n ? ` · ${n} text${n === 1 ? "" : "s"} sent` : ""}.`); return; }
       onDone?.(`Bid request saved for ${rows.length} vendor${rows.length === 1 ? "" : "s"}${n ? ` · ${n} text${n === 1 ? "" : "s"} sent` : ""}. Answers land on their page and the job's Summary.`);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -223,14 +251,14 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   };
 
   if (!open) return null;
-  const ready = !!jobId && shown.length > 0 && picked.length > 0 && picked.every((v) => (who[v.id] === "text" ? !!v.phone : who[v.id] === "email" ? !!v.email : !!v.phone || !!v.email));
+  const ready = !!jobId && shown.length > 0 && (picked.length > 0 || !!edit) && picked.every((v) => (who[v.id] === "text" ? !!v.phone : who[v.id] === "email" ? !!v.email : !!v.phone || !!v.email));
   const card: React.CSSProperties = { background: T.card, border: `1px solid ${T.hair}`, borderRadius: 4, padding: 12 };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Bid request" sub={made ? "Sent · one link per vendor" : from ?? "Draft"} drop>
+    <Drawer open={open} onClose={onClose} title={edit ? "Edit bid request" : "Bid request"} sub={made ? (edit ? "Updated · same links" : "Sent · one link per vendor") : edit ? "Every vendor keeps their link — it shows the new version" : from ?? "Draft"} drop>
       {made ? (
         <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 760 }}>
-          <div style={{ fontSize: F.sm, color: T.ink2 }}>Each vendor has their own link. Their answer lands in their thread (as a note), on their page and on the job&apos;s Summary.</div>
+          <div style={{ fontSize: F.sm, color: T.ink2 }}>{edit ? "Saved. Every vendor's link now shows the new version. " : ""}Each vendor has their own link. Their answer lands in their thread (as a note), on their page and on the job&apos;s Summary.</div>
           {made.map((r) => (
             <div key={r.id} className="flex items-center gap-2 flex-wrap" style={{ ...card, padding: "8px 10px" }}>
               <InitialsBox name={r.name} size={28} />
@@ -254,7 +282,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
           {/* 1 · job */}
           <section style={card}>
             {stepHead(1, "Which job")}
-            {jobs === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : jobs.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>No open jobs.</div> : (() => {
+            {edit ? <div style={{ fontSize: F.sm }}><b>{job?.title ?? "…"}</b><span style={{ color: T.ink3 }}> · the job stays the same when editing</span></div>
+            : jobs === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : jobs.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>No open jobs.</div> : (() => {
               // Find a job by its name or address (Coy, 2026-10-10).
               const all = jobId && !jobs.some((j) => j.id === jobId) && job ? [{ id: job.id, title: job.title, address: job.address, status: null }, ...jobs] : jobs;
               const words = jobQ.toLowerCase().split(/\s+/).filter(Boolean);
@@ -285,7 +314,24 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
               <div style={{ flex: 1 }}>{stepHead(2, "Who gets it", tradeHint ?? undefined)}</div>
               <button onClick={() => setAdding(!adding)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{adding ? "Done adding" : "+ Add vendor"}</button>
             </div>
-            {picked.length === 0 && !adding && <div style={{ fontSize: F.sm, color: T.ink3, marginBottom: 6 }}>Nobody yet — pick from the vendors below.</div>}
+            {already.length > 0 && (
+              <div className="mb-2">
+                {already.map((r) => (
+                  <div key={r.contact_id} className="flex items-center gap-2 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                    <InitialsBox name={r.name} size={26} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{r.name}</div>
+                      <div style={{ fontSize: F.xs, color: T.ink3 }}>Has the link{r.answered_at ? " · answered — they'll be asked to check their price" : ""}</div>
+                    </div>
+                  </div>
+                ))}
+                <label className="flex items-center gap-1.5 mt-1" style={{ fontSize: F.sm }}>
+                  <Check on={tellOld} onClick={() => setTellOld(!tellOld)} label="Text them that it changed" />
+                  <span>Text {already.length === 1 ? "them" : `these ${already.length}`} that it changed (same link)</span>
+                </label>
+              </div>
+            )}
+            {picked.length === 0 && !adding && !edit && <div style={{ fontSize: F.sm, color: T.ink3, marginBottom: 6 }}>Nobody yet — pick from the vendors below.</div>}
             {picked.map((v) => {
               const cur = who[v.id];
               return (
@@ -303,7 +349,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
                 </div>
               );
             })}
-            {(adding || picked.length === 0) && (
+            {(adding || (picked.length === 0 && !edit)) && (
               <div className="mt-2">
                 <input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a vendor or trade" aria-label="Find a vendor" style={{ ...field, width: "100%" }} />
                 <div className="flex flex-col mt-1">
@@ -419,7 +465,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
             <button onClick={() => void send()} disabled={!ready || busy}
               style={{ height: 40, padding: "0 18px", borderRadius: 4, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.md, textTransform: "uppercase", letterSpacing: ".06em",
                 cursor: ready && !busy ? "pointer" : "not-allowed", opacity: ready && !busy ? 1 : 0.5 }}>
-              {busy ? "Sending…" : `Send ${picked.length} bid request${picked.length === 1 ? "" : "s"}`}
+              {busy ? (edit ? "Saving…" : "Sending…") : edit ? `Save changes${picked.length ? ` · send ${picked.length} new` : ""}` : `Send ${picked.length} bid request${picked.length === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>

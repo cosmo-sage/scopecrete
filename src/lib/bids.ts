@@ -304,6 +304,46 @@ export function bidText(w: BidWords): string {
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * The text to a vendor already on a request that was edited (migration 124): their link is the same,
+ * the page shows the new version. Said plainly that it changed, and when an answer they sent needs a look.
+ */
+export function bidUpdateText(w: BidWords & { answered?: boolean }): string {
+  const hi = firstName(w.name);
+  return [
+    `${hi ? `${hi} — ` : ""}${w.org ?? "We"} updated the bid request${w.job ? ` for ${w.job}` : ""}.`,
+    w.answered ? "Please check your price against the changes and send it again." : "",
+    shortDate(w.priceBy) ? `Price by ${shortDate(w.priceBy)}.` : "",
+    `Same link: ${w.url}`,
+  ].join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The composer's ticks for a request already sent: which of the job's sections and lines are on it
+ * and who supplies each, read off the vendor's copy. A line added to the budget since is left to the
+ * starting pick; a section no longer on the job simply drops.
+ */
+export function pickFromShown(jobScopes: ComposeScope[], shown: ShownScope[]): { scopes: Record<string, boolean>; lines: Record<string, boolean>; supplied: Record<string, boolean> } {
+  const byKey = new Map(shown.map((s) => [s.key, s]));
+  const out = { scopes: {} as Record<string, boolean>, lines: {} as Record<string, boolean>, supplied: {} as Record<string, boolean> };
+  for (const s of jobScopes) {
+    const was = byKey.get(s.key);
+    out.scopes[s.key] = !!was;
+    if (!was) continue;
+    const ls = new Map(was.lines.map((l) => [l.key, l]));
+    for (const l of s.lines) {
+      const hit = ls.get(String(l.id).slice(0, 80));
+      out.lines[l.id] = !!hit;
+      if (hit) out.supplied[l.id] = !!hit.supplied;
+    }
+  }
+  return out;
+}
+
+/** An answer sent before the request was last edited — it priced an older version. */
+export const answeredBeforeEdit = (answeredAt: string | null | undefined, editedAt: string | null | undefined) =>
+  !!answeredAt && !!editedAt && Date.parse(answeredAt) < Date.parse(editedAt);
+
 export function bidEmail(w: BidWords): { subject: string; body: string } {
   return {
     subject: `Bid request${w.job ? ` — ${w.job}` : ""}${w.org ? ` (${w.org})` : ""}`,

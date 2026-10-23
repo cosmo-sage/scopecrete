@@ -427,6 +427,8 @@ export function FileDetails({ f, sections, onSaved, onDeleted, onAdded, links, b
             style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
             onBlur={(e) => { if ((e.target.value.trim() || null) !== (f.note ?? null)) void save({ note: e.target.value }); }} />
         </label>}
+        {/* Coy, 2026-10-23: a photo taken in the Photo inbox needs a way onto a job, or a new one. */}
+        {!f.job_id && <JobFiling f={f} busy={busy} onPick={(id) => void save({ file_to: { kind: "job", id }, ...(/pdf/i.test(`${f.mime_type ?? ""} ${f.name}`) ? { in_plan_room: true } : {}) })} />}
         {f.job_id && (
           <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={f.show_on_proposal} disabled={busy} onChange={(e) => void save({ show_on_proposal: e.target.checked })}
@@ -446,5 +448,28 @@ export function FileDetails({ f, sections, onSaved, onDeleted, onAdded, links, b
           <button onClick={() => void del()} disabled={busy} style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete file</button>
         </div>
       </div>
+  );
+}
+
+/** A file on no job: put it on one, or start a new job with it (the New job page files it, ?files=). */
+function JobFiling({ f, busy, onPick }: { f: FileRow; busy: boolean; onPick: (jobId: string) => void }) {
+  const [jobs, setJobs] = useState<{ id: string; title: string | null }[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/jobs").then((r) => r.ok ? r.json() : { jobs: [] }).then((b) => {
+      if (live) setJobs(((b.jobs ?? []) as { id: string; title: string | null; status?: string }[]).filter((j) => j.status !== "lost" && j.status !== "complete" && j.status !== "closed"));
+    }).catch(() => { if (live) setJobs([]); });
+    return () => { live = false; };
+  }, []);
+  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
+  return (
+    <div className="block">
+      <span style={eyebrow}>Job</span>
+      <select value="" disabled={busy || !jobs} onChange={(e) => { if (e.target.value) onPick(e.target.value); }} style={field}>
+        <option value="">{jobs ? (jobs.length ? "Put it on a job…" : "No open jobs") : "Loading jobs…"}</option>
+        {(jobs ?? []).map((j) => <option key={j.id} value={j.id}>{j.title || "Untitled job"}</option>)}
+      </select>
+      <Link href={`/dashboard/jobs/new?files=${f.id}`} style={{ display: "inline-block", marginTop: 6, fontSize: F.sm, fontWeight: 600, color: T.chalk }}>+ New job with this {f.kind === "image" ? "photo" : "file"} ›</Link>
+    </div>
   );
 }

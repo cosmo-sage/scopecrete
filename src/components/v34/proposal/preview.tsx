@@ -33,6 +33,7 @@ export interface PropLink {
   /** SE-26-0001-A (src/lib/proposal-number.ts). */
   number?: string | null;
   events?: Array<{ event: string; occurred_at: string; user_agent: string | null }>;
+  messages?: Array<{ name: string | null; body: string; at: string; contact_id?: string | null }>;
 }
 
 async function call(url: string, method: string, body?: unknown) {

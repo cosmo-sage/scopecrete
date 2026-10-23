@@ -36,6 +36,7 @@ import {
 } from "@/lib/proposal-pages";
 import { AddPageMenu, EditorHead, Modal, PageColumn, PullIn, SendCheck, UndoToast, pageFromPick, type AddPick } from "./builder";
 import { sendBytes } from "@/components/v34/files-panel";
+import { ProposalOpenings } from "./openings";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -111,6 +112,9 @@ export function Proposal({ jobId }: { jobId: string }) {
   const [preview, setPreview] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("send") === "1");
   const [copied, setCopied] = useState(false);
   const [links, setLinks] = useState<PropLink[]>([]);
+  const [showOpens, setShowOpens] = useState(false);
+  const opens = links.reduce((n, l) => n + (l.events ?? []).filter((e) => e.event === "viewed").length, 0);
+  const msgCount = links.reduce((n, l) => n + (l.messages?.length ?? 0), 0);
   const loadLinks = useCallback(() => {
     call(`/api/jobs/${jobId}/proposal/link`, "GET").then((d) => setLinks((d.links ?? []) as PropLink[])).catch(() => {});
   }, [jobId]);
@@ -596,8 +600,12 @@ export function Proposal({ jobId }: { jobId: string }) {
             {shownNumber !== vm.number && <>{" · "}sent as {vm.number}</>}
             {" · "}{vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
               : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` (${usd(ok.rounded)} rounded up from ${usd(ok.calc)}${ok.tax ? `, plus ${usd(ok.tax)} tax` : ""})` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`}
-            {/* Sent / opened: on the Summary and in Preview. */}
+            {/* Opened: a dated list of every opening drops down here (Coy, 2026-10-23), as on the Summary. */}
+            {opens > 0 && <>{" · "}<button onClick={() => setShowOpens((x) => !x)} aria-expanded={showOpens}
+              style={{ background: "none", border: "none", padding: 0, color: T.green, fontSize: "inherit", cursor: "pointer", textDecoration: "underline" }}>
+              opened {opens === 1 ? "once" : `${opens} times`}{msgCount ? ` · ${msgCount} message${msgCount === 1 ? "" : "s"}` : ""} {showOpens ? "▴" : "▾"}</button></>}
           </div>
+          {showOpens && <div style={{ padding: "6px 12px 4px", maxHeight: 280, overflowY: "auto" }}><ProposalOpenings links={links} first={12} /></div>}
           {!wide && <div className="flex items-center gap-2 flex-wrap" style={{ padding: "6px 12px 0" }}>{actions}</div>}
           <button onClick={() => setPanel((x) => !x)} aria-expanded={panel || wide} className="w-full flex items-center gap-2 text-left" style={{ padding: "6px 12px", display: wide ? "none" : "flex", cursor: "pointer", color: T.ink2, fontSize: 12 }}>
             <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Proposal settings</span>

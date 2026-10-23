@@ -100,3 +100,22 @@ test("the owner's own pages reach the customer's copy, switched-off ones don't, 
   assert.deepEqual(a.files, { f1: "org1/x/a.jpg" });
   assert.ok(a.paths.includes("org1/x/a.jpg") && !a.paths.includes("org2/x/b.jpg"));
 });
+
+test("openings: opened, signed and messages, newest first, with the device", async () => {
+  const { openingRows, deviceOf, centralStamp } = await import("../src/lib/proposal-links.ts");
+  const rows = openingRows([
+    { number: "SE-26-0004-C", events: [
+      { event: "viewed", occurred_at: "2026-10-20T15:00:00Z", user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile/15E148 Safari/604.1" },
+      { event: "sent", occurred_at: "2026-10-19T15:00:00Z", user_agent: null },
+      { event: "accepted", occurred_at: "2026-10-21T15:00:00Z", user_agent: null }],
+      messages: [{ name: "Johnette Wilson", body: "Can we start Monday?", at: "2026-10-22T15:00:00Z", contact_id: "c1" }] },
+    { version: { version: 2 }, events: [{ event: "viewed", occurred_at: "2026-10-18T15:00:00Z", user_agent: "Mozilla/5.0 (Linux; Android 14) Chrome/120.0 Mobile Safari/537.36" }] },
+  ]);
+  assert.deepEqual(rows.map((r) => r.kind), ["message", "signed", "opened", "opened"]);
+  assert.equal(rows[0].contact_id, "c1");
+  assert.equal(rows[2].device, "iPhone · Safari");
+  assert.equal(rows[3].number, "v2");
+  assert.equal(rows[3].device, "Android · Chrome");
+  assert.equal(deviceOf(""), null);
+  assert.equal(centralStamp("2026-10-23T19:14:00Z"), "Fri, Oct 23 · 2:14 PM");
+});

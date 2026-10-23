@@ -43,11 +43,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string; token: string }>;
   const ids = rows.map((d) => d.id);
-  const [{ data: ev }, numbers] = await Promise.all([
+  const [{ data: ev }, numbers, msgs] = await Promise.all([
     ids.length
-      ? supabase.from("document_events").select("document_id, event, occurred_at, user_agent").eq("org_id", orgId).in("document_id", ids).order("occurred_at", { ascending: false }).limit(60)
+      ? supabase.from("document_events").select("document_id, event, occurred_at, user_agent").eq("org_id", orgId).in("document_id", ids).order("occurred_at", { ascending: false }).limit(300)
       : Promise.resolve({ data: [] }),
     proposalNumbers(supabase, orgId),
+    // What the customer wrote from each link (migration 127); before 127 the column is missing and none show.
+    linkMessages(supabase, orgId, ids),
   ]);
   const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
   // Each link's proposal number, SE-26-0001-A (src/lib/proposal-number.ts).
@@ -56,7 +58,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return v ? numbers.number(id, v) : null;
   };
   return applyCookies(NextResponse.json({
-    links: rows.map((d) => ({ ...d, number: numberOf(d), url: `${origin}/p/${d.token}`, events: ((ev ?? []) as Array<{ document_id: string }>).filter((e) => e.document_id === d.id).slice(0, 20) })),
+    links: rows.map((d) => ({ ...d, number: numberOf(d), url: `${origin}/p/${d.token}`, events: ((ev ?? []) as Array<{ document_id: string }>).filter((e) => e.document_id === d.id).slice(0, 120),
+      messages: msgs.filter((m) => m.document_id === d.id).map((m) => ({ name: m.from_name, body: m.body, at: m.created_at, contact_id: m.contact_id })) })),
   }));
 }
 
@@ -276,4 +279,12 @@ async function pageFilePaths(supabase: Sb, orgId: string, jobId: string, ids: st
   const out: Record<string, string> = {};
   for (const r of data ?? []) if (r.storage_path) out[r.id as string] = r.storage_path as string;
   return out;
+}
+
+type LinkMessage = { document_id: string; contact_id: string; from_name: string | null; body: string; created_at: string };
+async function linkMessages(supabase: Sb, orgId: string, ids: string[]): Promise<LinkMessage[]> {
+  if (!ids.length) return [];
+  const r = await supabase.from("contact_notes").select("document_id, contact_id, from_name, body, created_at")
+    .eq("org_id", orgId).in("document_id", ids).order("created_at", { ascending: false }).limit(100);
+  return r.error ? [] : ((r.data ?? []) as unknown as LinkMessage[]);
 }

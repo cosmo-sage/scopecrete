@@ -113,6 +113,7 @@ export function SharedProposal({ token }: { token: string }) {
         </div>
       )}
       <ProposalDocument vm={vm} edits={null} narrow={narrow} />
+      <MessageBox token={token} org={state.org ?? null} own={!!state.own} narrow={narrow} />
       {!state.sig && state.canSign && state.vm?.priced.ok && (
         <div className="sc-no-print" style={{ position: "sticky", bottom: 0, maxWidth: 720, margin: "12px auto 0", padding: "10px 12px calc(10px + env(safe-area-inset-bottom))", background: "rgba(255,255,255,.96)", borderTop: "1px solid #D9CDB6", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 -4px 14px rgba(0,0,0,.06)" }}>
           {state.own ? (
@@ -130,6 +131,80 @@ export function SharedProposal({ token }: { token: string }) {
       )}
       {signing && <SignSheet token={token} total={vm.priced.ok ? money(signTotal) : null} addons={extra.ids}
         onClose={() => setSigning(false)} onSigned={() => { setSigning(false); setReload((n) => n + 1); window.scrollTo({ top: 0 }); }} />}
+    </div>
+  );
+}
+
+/**
+ * Write back to the contractor from the link (migration 127): their name and words become an internal
+ * note on their thread. Earlier messages from this link show above the box. Before 127 the route says
+ * it isn't switched on and the box isn't drawn.
+ */
+function MessageBox({ token, org, own, narrow }: { token: string; org: string | null; own: boolean; narrow: boolean }) {
+  type Msg = { name: string | null; body: string; at: string };
+  const [on, setOn] = useState<boolean | null>(null);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [name, setName] = useState(() => { try { return typeof window === "undefined" ? "" : localStorage.getItem("sc:p-name") ?? ""; } catch { return ""; } });
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/p/${encodeURIComponent(token)}/messages`, { cache: "no-store" }).then(async (r) => {
+      const b = await r.json().catch(() => ({}));
+      if (off) return;
+      setOn(!!b.on); setMsgs(Array.isArray(b.messages) ? b.messages : []);
+    }).catch(() => { if (!off) setOn(false); });
+    return () => { off = true; };
+  }, [token]);
+  if (!on) return null;
+  const send = async () => {
+    if (busy) return;
+    if (name.trim().length < 2) { setNote({ ok: false, text: "Type your name." }); return; }
+    if (!body.trim()) { setNote({ ok: false, text: "Write a message." }); return; }
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch(`/api/p/${encodeURIComponent(token)}/messages`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim(), body: body.trim() }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) { setNote({ ok: false, text: b?.error ?? "It didn't send. Try again." }); return; }
+      try { localStorage.setItem("sc:p-name", name.trim()); } catch { /* storage off */ }
+      setMsgs((m) => [...m, { name: name.trim(), body: body.trim(), at: b.at ?? new Date().toISOString() }]);
+      setBody("");
+      setNote({ ok: true, text: `Sent — ${org ?? "your contractor"} has it.` });
+    } catch { setNote({ ok: false, text: "Couldn't reach them. Check your connection and try again." }); }
+    finally { setBusy(false); }
+  };
+  const field: React.CSSProperties = { width: "100%", boxSizing: "border-box", border: "1px solid #C9BDA6", borderRadius: 4, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", background: "#fff", color: "#2A2A2A" };
+  const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return (
+    <div className="sc-no-print" style={{ maxWidth: 720, margin: narrow ? "14px 12px 0" : "16px auto 0", padding: 14, background: "#fff", border: "1px solid #D9CDB6", borderRadius: 4, color: "#2A2A2A" }}>
+      <div style={{ fontSize: 15, fontWeight: 700 }}>Questions? Message {org ?? "your contractor"}</div>
+      <div style={{ fontSize: 13, color: "#5E5A52", margin: "2px 0 10px" }}>
+        {own ? "Your customer writes to you here; it lands in Notes on their thread. You can't write here while signed in." : "Your message goes straight to them. They'll answer by text, call or email."}
+      </div>
+      {msgs.length > 0 && (
+        <ol style={{ listStyle: "none", margin: "0 0 10px", padding: 0, display: "grid", gap: 6 }}>
+          {msgs.map((m, i) => (
+            <li key={i} style={{ background: "#F4F0E8", borderRadius: 4, padding: "6px 10px", fontSize: 14 }}>
+              <div style={{ fontSize: 12, color: "#5E5A52" }}>{m.name ?? "You"} · {when(m.at)}</div>
+              <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body}</div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {!own && (
+        <div style={{ display: "grid", gap: 8 }}>
+          <input aria-label="Your name" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} style={field} />
+          <textarea aria-label="Your message" placeholder="Your question or message" value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={3} style={{ ...field, resize: "vertical" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ flex: 1, fontSize: 13, color: note ? (note.ok ? "#1F5C3A" : "#A33A2A") : "#5E5A52" }}>{note?.text ?? ""}</span>
+            <button type="button" onClick={send} disabled={busy}
+              style={{ height: 40, padding: "0 16px", border: 0, borderRadius: 6, background: "#2A2A2A", color: "#fff", fontSize: 14, fontWeight: 700, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+              {busy ? "Sending…" : "Send message"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

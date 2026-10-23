@@ -190,3 +190,45 @@ export function publicSnapshot(snap: Rec, extra: { project_type: string | null; 
     } : null,
   };
 }
+
+/**
+ * Every opening of a job's proposal links, newest first (Coy, 2026-10-23: "on the job summary page and
+ * on the proposal page a list of time/date stamped proposal openings"), with the signing and the
+ * customer's messages from the link (127) on the same list. Each says which proposal number, when
+ * (Central), and the device. A link is one per proposal, not per person, so who opened it isn't known.
+ */
+export interface OpeningRow { at: string; kind: "opened" | "signed" | "message"; number: string | null; device: string | null; name?: string | null; body?: string | null; contact_id?: string | null }
+export function openingRows(links: Array<{ number?: string | null; version?: { version: number } | null;
+  events?: Array<{ event: string; occurred_at: string; user_agent: string | null }>;
+  messages?: Array<{ name: string | null; body: string; at: string; contact_id?: string | null }> }>): OpeningRow[] {
+  const out: OpeningRow[] = [];
+  for (const l of links) {
+    const number = l.number ?? (l.version?.version ? `v${l.version.version}` : null);
+    for (const e of l.events ?? []) {
+      if (e.event !== "viewed" && e.event !== "accepted") continue;
+      out.push({ at: e.occurred_at, kind: e.event === "accepted" ? "signed" : "opened", number, device: deviceOf(e.user_agent) });
+    }
+    for (const m of l.messages ?? []) out.push({ at: m.at, kind: "message", number, device: null, name: m.name, body: m.body, contact_id: m.contact_id ?? null });
+  }
+  return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
+
+/** "iPhone · Safari" from a browser's user agent; null when there is none. */
+export function deviceOf(ua: string | null | undefined): string | null {
+  const s = ua ?? "";
+  if (!s.trim()) return null;
+  const os = /iPhone/.test(s) ? "iPhone" : /iPad/.test(s) ? "iPad" : /Android/.test(s) ? "Android" : /Windows/.test(s) ? "Windows"
+    : /Mac OS X|Macintosh/.test(s) ? "Mac" : /CrOS/.test(s) ? "Chromebook" : null;
+  const br = /EdgA?\//.test(s) ? "Edge" : /SamsungBrowser\//.test(s) ? "Samsung Internet" : /FBAN|FBAV|Instagram/.test(s) ? "Facebook"
+    : /CriOS|Chrome\//.test(s) ? "Chrome" : /FxiOS|Firefox\//.test(s) ? "Firefox" : /Safari\//.test(s) ? "Safari" : null;
+  return [os, br].filter(Boolean).join(" · ") || "a browser";
+}
+
+/** "Thu, Oct 23 · 2:14 PM" in Central time. */
+export function centralStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" });
+  return `${day} · ${time}`;
+}

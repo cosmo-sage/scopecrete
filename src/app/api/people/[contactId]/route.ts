@@ -62,8 +62,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     supabase.from("org_contact_subtypes").select("bucket, slug, label").eq("org_id", orgId),
     dupQuery,
     // Coy's notes (migration 041) — newest first; the timeline merges them in.
-    supabase.from("contact_notes").select("id, body, created_at, created_by").eq("org_id", orgId).eq("contact_id", contactId)
-      .order("created_at", { ascending: false }).limit(200),
+    // With 127 a note may be the customer's own message from their proposal link (document_id, from_name).
+    (async () => {
+      const q = (cols: string) => supabase.from("contact_notes").select(cols).eq("org_id", orgId).eq("contact_id", contactId)
+        .order("created_at", { ascending: false }).limit(200);
+      const r = await q("id, body, created_at, created_by, document_id, from_name");
+      return r.error ? q("id, body, created_at, created_by") : r;
+    })(),
     // Every email of theirs, for the contact card (Coy, 2026-10-06).
     supabase.from("contact_emails").select("email, label, is_primary").eq("org_id", orgId).eq("contact_id", contactId),
   ]);

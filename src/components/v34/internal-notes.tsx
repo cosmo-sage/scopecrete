@@ -20,7 +20,9 @@ import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { Microphone } from "@phosphor-icons/react";
 
-export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null }
+export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null;
+  /** The customer's own message from their proposal link (migration 127). */
+  document_id?: string | null; from_name?: string | null }
 
 export function InternalNotes({ contactId, name, notes, onSaved, leadSource, merges, onUndoMerge, undoing }: {
   contactId: string; name: string | null; notes: InternalNote[]; onSaved: () => void;
@@ -113,7 +115,16 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
-            {ordered.map((n) => archiveNote(n.body) ? (
+            {ordered.map((n) => n.document_id ? (
+              <div key={n.id} className="rounded" style={{ maxWidth: 640, background: T.card, border: `1px solid ${T.chalk}`, borderLeftWidth: 3, padding: "8px 12px" }}>
+                <div className="flex items-baseline gap-2" style={{ fontSize: 11.5, color: T.ink3 }}>
+                  <span style={{ fontFamily: disp, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, color: T.chalk }}>From {n.from_name ?? "the customer"}</span>
+                  <span>{relTime(n.created_at)}</span>
+                  <span>· on the proposal link</span>
+                </div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere", marginTop: 2 }}>{n.body}</div>
+              </div>
+            ) : archiveNote(n.body) ? (
               <ArchiveNoteCard key={n.id} body={n.body} at={n.created_at} who={who(n.created_by) === "You" ? "by you" : who(n.created_by) ? `by ${who(n.created_by)}` : null} />
             ) : (
               <div key={n.id} className="rounded" style={{ maxWidth: 640, background: T.hivizDim, border: `1px solid ${T.hair}`, padding: "8px 12px" }}>

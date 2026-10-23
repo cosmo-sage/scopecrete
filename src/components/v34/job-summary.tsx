@@ -23,6 +23,7 @@ import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { budget as priceBudget, jobMinimum, takeoff as takeoffOf, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal } from "@/lib/engine";
 import { signedLine, viewLine } from "@/lib/proposal-links";
+import { ProposalOpenings } from "@/components/v34/proposal/openings";
 import { dayLabel, todayCentral, validDay, whenLabel } from "@/lib/jobs/schedule";
 import { JobBids } from "@/components/v34/bids/job-bids";
 import { SpecsCard } from "@/components/v34/specs-card";
@@ -55,6 +56,8 @@ interface BudgetData {
 interface ProposalLink {
   id: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[] | null; view_count: number;
   last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null; number?: string | null;
+  events?: Array<{ event: string; occurred_at: string; user_agent: string | null }>;
+  messages?: Array<{ name: string | null; body: string; at: string; contact_id?: string | null }>;
 }
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
 
@@ -336,6 +339,13 @@ function ProposalState({ jobId, links, card, onWon }: {
         )}
       {links && links.length > 1 && (
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>{links.length} links made on this job</div>
+      )}
+      {/* Every opening, dated (Coy, 2026-10-23), with the signing and their messages from the link. */}
+      {links && links.some((l) => (l.events?.length ?? 0) > 0 || (l.messages?.length ?? 0) > 0) && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairSoft}` }}>
+          <div style={{ ...eyebrow, marginBottom: 4 }}>Openings</div>
+          <ProposalOpenings links={links} />
+        </div>
       )}
       {/* The customer said yes: one tap moves the job to Won and stamps the day (Coy, 2026-10-09). */}
       {live && onWon && !signed && (

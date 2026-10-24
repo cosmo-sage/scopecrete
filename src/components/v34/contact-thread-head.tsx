@@ -99,6 +99,9 @@ export interface HeadProps {
 
 export function ContactThreadHead(p: HeadProps) {
   const [open, setOpen] = useState<null | "phone" | "email" | "more">(null);
+  // On a phone the header is their initials and the buttons; a tap on the initials shows the name
+  // and their customer or vendor across the header in place of the buttons, a second tap puts them back.
+  const [shown, setShown] = useState(false);
   const moreBox = useDismiss(open === "more", () => setOpen(null));
   const close = () => setOpen(null);
   const [reading, setReading] = useReading();
@@ -119,23 +122,25 @@ export function ContactThreadHead(p: HeadProps) {
     background: on ? T.hivizDim : T.card, color: T.ink, cursor: "pointer", fontSize: 12.5, padding: "0 6px", whiteSpace: "nowrap" });
   return (
     <div className="flex-shrink-0 flex items-center gap-2.5" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 12px 10px 16px" }}>
-      <span aria-hidden className="shrink-0 flex items-center justify-center"
-        style={{ width: 36, height: 36, borderRadius: 999, background: `color-mix(in srgb, ${hue} 12%, transparent)`, color: `color-mix(in srgb, ${hue} 80%, ${T.ink})`,
-          fontFamily: "var(--sc-font-strong)", fontWeight: 700, fontSize: 13 }}>{p.name ? initials(p.name) : "#"}</span>
-      <div className="min-w-0 flex-1 flex flex-col lg:flex-row lg:items-center lg:gap-2.5">
+      <button type="button" onClick={() => { setShown(v => !v); close(); }} aria-expanded={shown}
+        aria-label={shown ? "Show the buttons" : `Show ${title}'s name`} title={title}
+        className="shrink-0 flex items-center justify-center lg:pointer-events-none"
+        style={{ border: "none", padding: 0, cursor: "pointer", width: 36, height: 36, borderRadius: 999, background: `color-mix(in srgb, ${hue} 12%, transparent)`, color: `color-mix(in srgb, ${hue} 80%, ${T.ink})`,
+          fontFamily: "var(--sc-font-strong)", fontWeight: 700, fontSize: 13 }}>{p.name ? initials(p.name) : "#"}</button>
+      <div className={`${shown ? "flex" : "hidden"} lg:flex min-w-0 flex-1 flex-col lg:flex-row lg:items-center lg:gap-2.5`}>
         <Link href={p.cardHref} title="Their contact page" className="min-w-0"
-          style={{ fontFamily: "var(--sc-font-strong)", fontWeight: 700, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          style={{ fontFamily: "var(--sc-font-strong)", fontWeight: 700, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: shown ? "normal" : "nowrap",
             textDecoration: "underline", textDecorationColor: T.hair, textUnderlineOffset: 4 }}>
           <span className="text-[16px] lg:text-[18px]">{title}</span>
         </Link>
         {!p.loading && p.org && p.org.label !== p.name && (<>
           <span aria-hidden className="hidden lg:block" style={{ width: 1, height: 16, background: T.hairStrong }} />
-          <span className="min-w-0 text-[12px] lg:text-[13px]" style={{ color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span className="min-w-0 text-[12px] lg:text-[13px]" style={{ color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: shown ? "normal" : "nowrap" }}>
             {p.org.kind}: <Link href={p.org.href} style={{ color: T.chalk, fontWeight: 600 }}>{p.org.label}</Link>
           </span>
         </>)}
       </div>
-      <div className="flex items-center gap-0.5 lg:gap-1">
+      <div className={`${shown ? "hidden" : "flex"} lg:flex ml-auto lg:ml-0 items-center gap-0.5 lg:gap-1`}>
         <button onClick={p.onSearch} aria-pressed={p.searching} aria-label="Search this thread" title="Search" style={round(p.searching)}><MagnifyingGlass size={18} /></button>
         <button onClick={p.onNotes} aria-pressed={p.notesOpen} aria-label={`Internal notes${p.nNotes ? ` (${p.nNotes})` : ""}`} title="Internal notes"
           className="hidden lg:inline-flex" style={{ ...round(p.notesOpen), position: "relative" }}>

@@ -1,7 +1,7 @@
 // Which parish a job is in, and its rate — `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parishFromAddress, jobTax } from "../src/lib/tax.ts";
+import { parishFromAddress, jobTax, addressParts } from "../src/lib/tax.ts";
 
 test("parish from the city", () => {
   assert.equal(parishFromAddress("4550 Nicholson Dr, Baton Rouge, LA 70808"), "East Baton Rouge");
@@ -58,4 +58,12 @@ test("the job's rate: typed, then picked parish, then the lookup for this addres
   assert.equal(jobTax({ address: "2 B St, Baton Rouge, LA", tax_lookup: lookup }, null, rates, "2 B St, Baton Rouge, LA").rate, 9.95, "a moved address doesn't use the old lookup");
   assert.equal(jobTax({ address: "1 A St, Baton Rouge, LA", tax_lookup: lookup, tax_parish: "East Baton Rouge" }, null, rates, "1 A St, Baton Rouge, LA").source, "parish");
   assert.equal(jobTax({ tax_rate_pct: 8, tax_rate_source: "override", tax_lookup: lookup }, null, rates).rate, 8);
+});
+
+test("an out-of-state job never takes the customer's Louisiana parish", () => {
+  assert.equal(addressParts("Wiggins, Mississippi")?.state ?? "MS", "MS");
+  const t = jobTax({ tax_rate_pct: null, tax_rate_source: null, tax_parish: null, address: "Wiggins, Mississippi", tax_lookup: null },
+    null, [{ parish: "East Baton Rouge", rate_pct: 5 }]);
+  assert.equal(t.rate, null);
+  assert.match(t.missing, /street address|type the rate/);
 });

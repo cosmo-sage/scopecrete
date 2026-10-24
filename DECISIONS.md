@@ -2492,6 +2492,7 @@ percentage of labour — all three contradict this section and §4.
   /api/jobs` on Coy's Apply (which now also takes `description`); the card
   names the person. In every context (`RECORD_RULES`); tested in
   `tests/dusty-plan.test.mjs`.
+  **And a budget line in place (Coy, 2026-10-24: Dusty told him to delete three concrete lines on Wiggins MS Flatwork to re-add them at MMC's $204.37/CY).** Each line in his budget context carries `line <ref>`; plan step `update_line` {line, unit_cost, qty (null = back to its rule), name, estimate} goes through the line's own PATCH on Coy's Apply. He is told never to ask Coy to delete and re-add a line. Outside Louisiana a tax place is a county ("Stone County", `taxPlace()`), never "… Parish". **An out-of-state job's tax:** a job with any address of its own (even "Wiggins, Mississippi", read as MS by `stateOf()`) never falls back to its customer's address or parish; with no street to look up it asks for one or a typed rate.
   **And a parish's sales tax (Coy, 2026-10-03: "Dusty needs to be able to
   update the sales tax for the parish the address found").** Asked "add a tax
   rate for East Baton Rouge", Dusty said he had no step for it. `set_tax`

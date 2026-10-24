@@ -29,6 +29,7 @@ export type PlanAction =
   // A vendor's price on an item already in the Price book (or one this plan makes) — from their call, text or quote
   // (Coy, 2026-10-05: "when I make a call have that recording for the vendor thread. And then I'll have dusty create the items").
   | { do: "vendor_price"; item: string; vendor: string; unit_cost: number | null; unit: string | null; note: string | null; estimate?: string }
+  | { do: "update_line"; line: string; unit_cost?: number | null; qty?: number | null; name?: string; estimate?: string }
   | { do: "update_item"; item: string; unit_cost?: number | null; unit?: string; name?: string; group?: string; estimate?: string }
   | { do: "new_group"; name: string; cost_type: string }
   // The Price book and assemblies (Coy, 2026-10-03: "dusty could edit my cost book (add, remove, edit cost
@@ -119,8 +120,11 @@ export const JOB_KEY = /^job\d{1,2}$/i;
 /** A vendor made earlier in the same plan (new_vendor's key): vend1, vend2 … */
 export const VEND_KEY = /^vend\d{1,2}$/i;
 /** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
+/** "Stone County" stays a county; a Louisiana parish name gets "Parish". */
+export const taxPlace = (p: string) => (/\b(county|parish|borough)\b/i.test(p) ? p : `${p} Parish`);
+/** Steps that touch a job's budget — they need the job open. */
 export const needsJob = (a: PlanAction) =>
-  a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
+  a.do === "add" || a.do === "update_line" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
 /** An email conversation's key (as /api/emails/drafts takes it) and an address. */
 export const EMAIL_CONV = /^[A-Za-z0-9._:@<>+-]{1,200}$/;
 const EMAIL_ADDR = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
@@ -163,7 +167,7 @@ const asmRef = (v: unknown) => ref(v) ?? (typeof v === "string" && ASM_KEY.test(
 const pos = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 1e6 ? v : null);
 
 /** Steps that may carry a number Dusty estimated, with its basis (Coy, 2026-10-09). */
-export const ESTIMATE_STEPS: ReadonlySet<string> = new Set(["add", "new_area", "new_item", "vendor_price", "update_item"]);
+export const ESTIMATE_STEPS: ReadonlySet<string> = new Set(["add", "new_area", "new_item", "vendor_price", "update_item", "update_line"]);
 
 /**
  * One action from the model, checked; null when it doesn't make sense (it is then listed as dropped).
@@ -227,6 +231,16 @@ function cleanActionBase(raw: unknown): PlanAction | null {
       const cost = numOr(r.unit_cost);
       if (!item || !vendor || cost === undefined) return null;
       return { do: "vendor_price", item, vendor, unit_cost: cost, unit: str(r.unit, 20), note: str(r.note, 300) };
+    }
+    case "update_line": {
+      const line = ref(r.line);
+      if (!line) return null;
+      const out: Extract<PlanAction, { do: "update_line" }> = { do: "update_line", line };
+      if ("unit_cost" in r) { const c = numOr(r.unit_cost); if (c === undefined) return null; out.unit_cost = c; }
+      if ("qty" in r) { const q = numOr(r.qty); if (q === undefined) return null; out.qty = q; }
+      const name = str(r.name, 120);
+      if (name) out.name = name;
+      return Object.keys(out).length > 2 ? out : null;
     }
     case "update_item": {
       const item = ref(r.item);
@@ -529,7 +543,7 @@ export function describe(a: PlanAction, names: Parameters<typeof describeBase>[1
   return describeBase(a, names) + est;
 }
 
-function describeBase(a: PlanAction, names: { item: (r: string) => string | null; area: (r: string | null) => string; takeoff?: (r: string) => string | null; assembly?: (r: string) => string | null; vendor?: (id: string) => string | null }): string {
+function describeBase(a: PlanAction, names: { item: (r: string) => string | null; area: (r: string | null) => string; takeoff?: (r: string) => string | null; line?: (r: string) => string | null; assembly?: (r: string) => string | null; vendor?: (id: string) => string | null }): string {
   const asm = (r: string) => names.assembly?.(r) ?? `assembly ${r} (not found)`;
   const itm = (r: string) => names.item(r) ?? `item ${r} (not found)`;
   const money = (n: number | null | undefined) => (n === null || n === undefined ? "no cost yet" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
@@ -549,6 +563,10 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
       const what = [a.trades?.length ? a.trades.join(", ") : null, a.note].filter(Boolean).join(" — ");
       return `${a.contact ? "File this contact as the vendor" : "New vendor"} “${a.name}” (${a.kind === "subcontractor" ? "sub" : a.kind})${reach.length ? ` — ${reach.join(", ")}` : ""}${a.address ? `, ${a.address}` : ""}${a.service_area ? `, ${a.service_area}` : ""}${what ? `. ${what}` : ""}`;
     }
+    case "update_line": {
+      const what = [a.name ? `rename to “${a.name}”` : null, "unit_cost" in a ? `unit cost ${money(a.unit_cost)}` : null, "qty" in a ? (a.qty === null ? "quantity back to its rule" : `quantity ${a.qty}`) : null].filter(Boolean).join(", ");
+      return `Change the budget line ${names.line?.(a.line) ?? `line ${a.line} (not on this budget)`}: ${what}`;
+    }
     case "update_item": {
       const what = [a.name ? `rename to “${a.name}”` : null, a.unit ? `unit ${a.unit}` : null, "unit_cost" in a ? `unit cost ${money(a.unit_cost)}` : null, a.group ? `move to ${a.group}` : null].filter(Boolean).join(", ");
       return `Change ${names.item(a.item) ?? `item ${a.item} (not found)`}: ${what}`;
@@ -565,7 +583,7 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
     case "add_to_assembly": return `Add ${itm(a.item)} to ${asm(a.assembly)}${a.qty !== null ? ` ×${a.qty}` : ""}`;
     case "remove_from_assembly": return `Take ${itm(a.item)} out of ${asm(a.assembly)}`;
     case "load_assembly": return `Load ${asm(a.assembly)} onto ${names.area(a.area)}`;
-    case "set_tax": return `Sales tax for ${a.parish} Parish: ${a.rate_pct}%${a.for_job ? " — and use it on this job" : ""}${a.source ? ` (from ${a.source})` : ""}. Check the rate before you apply.`;
+    case "set_tax": return `Sales tax for ${taxPlace(a.parish)}: ${a.rate_pct}%${a.for_job ? " — and use it on this job" : ""}${a.source ? ` (from ${a.source})` : ""}. Check the rate before you apply.`;
     case "set_address": {
       const whose = a.kind === "job" ? "the job's site" : a.kind === "customer" ? "the customer's address" : "their address";
       const full = [a.line1, a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -726,6 +744,7 @@ export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix
  {"do":"add","item":"<8-char item ref>","takeoff":"<8-char takeoff group ref>"},
  {"do":"add_group","group":"<group name>","area":"<area ref or job>"},
  {"do":"new_item","key":"item1","name":"…","unit":"SY","cost_type":"material|labor|equipment|subcontract|other","unit_cost":<number or null>,"qty_rule":"per_sqft|per_cy|per_lf_perimeter|per_day|per_job|manual","group":"<group name or omit>","area":"<area ref or job>","add":true,"qty":<number or omit>},
+ {"do":"update_line","line":"<line ref>","unit_cost":<number>,"qty":<number>,"name":"…"},
  {"do":"update_item","item":"<ref>","unit_cost":<number>,"unit":"…","name":"…","group":"<group name>"},
  {"do":"new_group","name":"…","cost_type":"…"},
  {"do":"rename_group","group":"<group name>","name":"<new name>"},
@@ -740,7 +759,8 @@ export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix
 \`\`\`
 To put items on an area this plan makes, use its key ("new1") as the area. To count an item from a takeoff group (the aerial or a plan sheet), add it with "takeoff":"<8-char takeoff group ref>" instead of an area — the line then moves when Coy re-measures.
 Price book and assemblies: a new item that a later step uses (an assembly, an add) takes a key ("item1") and "add":false unless it also goes on the budget; a new assembly takes a key ("asm1") so a later step can load it. "Remove" an item means retire_item (it leaves the Price book; budgets that used it keep their lines). An assembly is Coy's default set of items for a kind of area; when he asks for one, first look for an existing assembly in the CONTEXT that fits and load it; build one only if none fits, from his existing items where they fit. "auto":true (fill new areas of that kind on its own) only when Coy asks for it. Steps that touch a budget (add, add_group, new_area, load_assembly, a new_item with "add":true) need a job open — on the Price book, leave them out.
-Sales tax: when Coy asks to add or change a parish's rate, or the job's tax says "no rate for <parish>" or "parish unknown", propose set_tax with the parish (from the job's address, or as Coy named it) and the combined rate (state + parish + local) as one %. If Coy gave the rate, use it and say so in "source"; if you are giving it from what you know, say that in "source" ("Dusty's figure — check the parish's published rate") and tell Coy in words to check it. "for_job": true also sets this job's parish. Never set a rate Coy didn't ask about.
+Budget lines: each line in the budget carries "line <ref>". To change a line's unit cost, quantity or name (a new vendor price, a corrected yardage), propose update_line on that ref — never tell Coy to delete a line and add it again. Give only the fields that change; "qty": null puts the quantity back to its rule. A changed price of the Price book item itself is update_item.
+Sales tax: outside Louisiana there are counties, not parishes — write "Stone County" and the combined rate (state + county + city). When Coy asks to add or change a parish's rate, or the job's tax says "no rate for <parish>" or "parish unknown", propose set_tax with the parish (from the job's address, or as Coy named it) and the combined rate (state + parish + local) as one %. If Coy gave the rate, use it and say so in "source"; if you are giving it from what you know, say that in "source" ("Dusty's figure — check the parish's published rate") and tell Coy in words to check it. "for_job": true also sets this job's parish. Never set a rate Coy didn't ask about.
 Rules for plans: use ONLY item refs, area refs, assembly refs and takeoff group refs listed in the CONTEXT (or a key made earlier in the same plan) — never make one up. Prefer an existing item over a new one. A unit_cost or a qty is either known — Coy said it, or the CONTEXT has it (a bid line, a section, a measured takeoff total, his notes, a transcript line, his Price book) — or your estimate. Known: give it plainly. Estimated (Coy asked for your best guess, or the budget can't be finished without it): give it AND "estimate":"<its basis>" on that step — the GOING PRICES or WEB PRICES result with its site and date, "your Price book: <item> $X", "your <job> budget", or "rule of thumb: <the rule>" — e.g. {"do":"add","item":"…","area":"…","qty":3,"estimate":"rule of thumb: 1 crew day per 400 SF formed and poured"}. The step shows as ESTIMATE on the card and the line stays marked Estimate on the budget until Coy taps Confirm. Never mark a known number as an estimate, never give an estimated one without "estimate", and leave a number out (null cost, no qty — the item's rule counts it from the area) when you have nothing to base it on. A new area's size is estimated only when Coy asks for a guess. Counted by the area with unit SY counts square yards. Keep a plan to what was asked.
 Vendor prices from a call, a text or a quote. On a vendor's page (the CONTEXT has "Vendor (their page is open)" and "This thread: contact <id>"), when Coy asks you to make the items from what they quoted: for each thing they priced, put their price on an existing item that is the same thing — {"do":"vendor_price","item":"<8-char item ref or item1>","vendor":"<their full contact id>","unit_cost":<number>,"unit":"EA","note":"quoted on the Oct 5 call"} — or make the item with their price: a new_item with "vendor":"<their full contact id>", "add":false (no job is open on their page), the unit they priced it in and qty_rule "manual" unless it is clearly per yard, per sq ft or per day. A unit_cost only as they said or wrote it — on a call that is the transcript or Quo's summary, which a machine heard: quote the line in your answer so Coy can check the number (a "$1,450" can be heard as "$1,415"). A price per piece is per piece; delivery, freight or a minimum charge is its own item. Say what they didn't price (lead time, delivery, tax) rather than filling it in.`;
 

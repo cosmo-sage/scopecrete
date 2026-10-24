@@ -72,6 +72,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       return look ? byRef(look.sections, r)?.name ?? `area ${r} (not on this job)` : `area ${r}`;
     },
     takeoff: (r: string) => (look ? byRef(look.takeoff, r)?.name ?? null : null),
+    line: (r: string) => (look ? byRef(look.lines ?? [], r)?.name ?? null : r),
     item: (r: string) => {
       const made = actions.find((x) => x.do === "new_item" && x.key === r);
       if (made && made.do === "new_item") return `the new item “${made.name}”`;

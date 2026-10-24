@@ -45,8 +45,10 @@ async function jobsWithTax(sb: Sb, orgId: string, jobIds: string[]) {
   return sb.from("jobs").select(base).eq("org_id", orgId).in("id", jobIds);
 }
 
-/** Where a job's sales tax is looked up: its own address, else its customer's. */
+/** Where a job's sales tax is looked up: its own address, else (only when it has none) its customer's. */
 export function taxAddress(job: Record<string, unknown>, cust: { address_formatted?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; zip?: string | null } | null) {
+  const own = addressParts({ line1: job.address as string | null, city: job.city as string | null, state: job.state as string | null, zip: job.zip as string | null });
+  if (own || String(job.address ?? "").trim() || String(job.city ?? "").trim()) return own;
   return addressParts({ line1: job.address as string | null, city: job.city as string | null, state: job.state as string | null, zip: job.zip as string | null })
     ?? (cust ? addressParts({ line1: cust.address_line1 ?? null, city: cust.city ?? null, state: cust.state ?? null, zip: cust.zip ?? null }) ?? addressParts(cust.address_formatted ?? null) : null);
 }
@@ -84,7 +86,7 @@ export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promi
     const where = taxAddress(j, j.customer_id ? custRow.get(j.customer_id as string) ?? null : null);
     const tax = jobTax({ tax_rate_pct: num(j.tax_rate_pct), tax_rate_source: j.tax_rate_source as string | null,
       tax_parish: j.tax_parish as string | null, address: j.address as string | null, tax_lookup: (j.tax_lookup as TaxLookup | null | undefined) ?? null },
-      j.customer_id ? custAddr.get(j.customer_id as string) ?? null : null, rateRows, where?.text ?? null);
+      String(j.address ?? "").trim() ? null : j.customer_id ? custAddr.get(j.customer_id as string) ?? null : null, rateRows, where?.text ?? null);
     out.set(j.id as string, {
       settings: {
         margin_pct: em ?? money.default_margin_pct, overhead_pct: eo ?? money.default_overhead_pct,

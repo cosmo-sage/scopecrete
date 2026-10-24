@@ -51,6 +51,17 @@ export function parishFromAddress(address: string | null | undefined): string | 
   return parishes.size === 1 ? [...parishes][0] : null;
 }
 
+const STATE_WORDS: Record<string, string> = { louisiana: "LA", mississippi: "MS", texas: "TX", arkansas: "AR", alabama: "AL", florida: "FL", georgia: "GA", tennessee: "TN", oklahoma: "OK" };
+/** An address that names a state other than Louisiana. */
+export const outOfState = (address: string) => { const st = stateOf(address); return !!st && st !== "LA"; };
+/** The state an address names, as two letters ("Wiggins, Mississippi" → MS), else null. */
+export function stateOf(address: string): string | null {
+  const a = norm(address);
+  for (const [w, ab] of Object.entries(STATE_WORDS)) if (new RegExp(`\\b${w}\\b`).test(a)) return ab;
+  const m = /,\s*([a-z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*(?:,\s*(?:usa|united states))?$/.exec(a);
+  return m ? m[1].toUpperCase() : null;
+}
+
 export interface TaxLookup {
   /** Combined rate for the address, in % (10.5 for 0.105). */
   rate_pct: number;
@@ -97,6 +108,7 @@ export function addressParts(a: { line1?: string | null; city?: string | null; s
     const tail = parts.slice(1).join(" ");
     const m = /\b([A-Za-z]{2})\s*(\d{5})?(?:-\d{4})?\s*(?:usa|united states)?$/i.exec(tail);
     if (m) { state = m[1].toUpperCase(); zip = m[2] ?? null; }
+    else state = stateOf(a);
     city = parts.length > 2 ? parts[1] : parts[1]?.replace(/\s+[A-Za-z]{2}(\s+\d{5}(-\d{4})?)?$/, "").trim() || null;
     if (city && /^[A-Za-z]{2}(\s+\d{5})?$/.test(city)) city = null;
   } else {
@@ -119,13 +131,19 @@ export function jobTax(job: { tax_rate_pct?: number | null; tax_rate_source?: st
   if (job.tax_rate_source === "override" && typeof job.tax_rate_pct === "number") {
     return { rate: job.tax_rate_pct, parish: job.tax_parish ?? null, source: "override", missing: null };
   }
-  const parishFromAddr = parishFromAddress(job.address) || parishFromAddress(fallbackAddress);
+  // A job with an address of its own is taxed where it is, never at its customer's office (Coy, 2026-10-24: a
+  // Wiggins, MS job read 5% East Baton Rouge from Gulfline's Baton Rouge address).
+  const own = !!job.address?.trim();
+  const parishFromAddr = own ? parishFromAddress(job.address) : parishFromAddress(fallbackAddress);
   const lk = job.tax_lookup;
-  if (!job.tax_parish && lk && typeof lk.rate_pct === "number" && (currentAddress == null || lk.address === currentAddress)) {
+  // currentAddress null: nothing to look up now, so an old lookup (of another address) isn't used.
+  if (!job.tax_parish && lk && typeof lk.rate_pct === "number" && (currentAddress === undefined || lk.address === currentAddress)) {
     return { rate: lk.rate_pct, parish: parishFromAddr, source: "lookup", missing: null, lookup: lk };
   }
   const parish = job.tax_parish || parishFromAddr;
-  if (!parish) return { rate: null, parish: null, source: null, missing: "parish unknown — set it on the job" };
+  if (!parish) return { rate: null, parish: null, source: null, missing: own && outOfState(job.address!)
+    ? "no rate for this address — give the job a street address to look it up, or type the rate"
+    : "parish unknown — set it on the job" };
   const r = rates.find((x) => x.parish.toLowerCase() === parish.toLowerCase());
   if (!r) return { rate: null, parish, source: null, missing: `no rate for ${parish} — add it in Settings → Cost book` };
   return { rate: Number(r.rate_pct), parish, source: "parish", missing: null };

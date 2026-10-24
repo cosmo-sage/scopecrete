@@ -352,3 +352,11 @@ test("work_space: a Work Space of Coy's own, members on named shelves, ids from 
   assert.equal(cleanAction({ do: "work_space", name: " " }), null);
   assert.match(RECORD_RULES, /"do":"work_space"/);
 });
+
+test("update_line changes a budget line in place", () => {
+  const a = cleanAction({ do: "update_line", line: "ABCDEF12", unit_cost: 204.37, qty: 9 });
+  assert.deepEqual(a, { do: "update_line", line: "abcdef12", unit_cost: 204.37, qty: 9 });
+  assert.equal(needsJob(a), true);
+  assert.equal(cleanAction({ do: "update_line", line: "abcdef12" }), null);
+  assert.match(describe(a, { item: () => null, area: () => "", line: () => "4000 psi ready mix" }), /4000 psi ready mix.*\$204\.37.*quantity 9/);
+});

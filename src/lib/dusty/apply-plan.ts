@@ -6,7 +6,7 @@
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
 import { APPOINTMENTS_EVENT, whenText } from "@/lib/appointments";
-import { CUST_KEY, JOB_KEY, RECORD_STEPS, VEND_KEY, needsJob, type PlanAction } from "@/lib/dusty/plan";
+import { CUST_KEY, JOB_KEY, RECORD_STEPS, VEND_KEY, needsJob, taxPlace, type PlanAction } from "@/lib/dusty/plan";
 import { markEstimate } from "@/lib/estimate-flag";
 
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,6 +20,7 @@ export interface PlanLookup {
   items: Array<{ id: string; name: string; cost_group_id: string | null }>;
   groups: Array<{ id: string; name: string }>;
   sections: Array<{ id: string; name: string | null }>;
+  lines?: Array<{ id: string; name: string; description?: string | null }>;
   takeoff: Array<{ id: string; name: string }>;
   assemblies: Array<{ id: string; name: string; items: Array<{ id: string; cost_item_id: string }> }>;
 }
@@ -39,12 +40,14 @@ export async function loadLookup(jobId: string | null): Promise<PlanLookup> {
     jobId ? call(`/api/jobs/${jobId}/sections`, "GET") : Promise.resolve({ sections: [] }),
     jobId ? call(`/api/jobs/${jobId}/takeoff/parameters`, "GET").catch(() => ({ parameters: [] })) : Promise.resolve({ parameters: [] }),
     call("/api/assemblies", "GET").catch(() => ({ assemblies: [] }))]);
+  const b = jobId ? await call(`/api/jobs/${jobId}/budget`, "GET").catch(() => ({ lines: [] })) : { lines: [] };
   return {
     assemblies: (a.assemblies ?? []) as PlanLookup["assemblies"],
     items: ((c.items ?? []) as Array<{ id: string; name: string; cost_group_id: string | null; active?: boolean }>).filter((i) => i.active !== false),
     groups: (c.groups ?? []) as PlanLookup["groups"],
     sections: (s.sections ?? []) as PlanLookup["sections"],
     takeoff: (t.parameters ?? []) as PlanLookup["takeoff"],
+    lines: (b.lines ?? []) as NonNullable<PlanLookup["lines"]>,
   };
 }
 
@@ -93,7 +96,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
     return (b.lines ?? []).length as number;
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
-  const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
+  const order = { new_group: 0, rename_group: 1, update_item: 1, update_line: 7, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
     add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12, bid_request: 12, use_bid: 12 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
@@ -104,7 +107,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         // Saved as Coy's rate — his Apply tap is the entry (Price book → Defaults shows and changes it).
         await call("/api/tax-parishes", "POST", { parish: a.parish, rate_pct: a.rate_pct, note: a.source ? `From Dusty's plan: ${a.source}` : "From Dusty's plan" });
         if (a.for_job && jobId) await call(`/api/jobs/${jobId}`, "PATCH", { tax_parish: a.parish });
-        out.push({ ok: true, text: `${a.parish} Parish sales tax set to ${a.rate_pct}%${a.for_job && jobId ? " and used on this job" : ""}` });
+        out.push({ ok: true, text: `${taxPlace(a.parish)} sales tax set to ${a.rate_pct}%${a.for_job && jobId ? " and used on this job" : ""}` });
         continue;
       }
       if (a.do === "retire_item") {
@@ -185,6 +188,16 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         const b = await call("/api/cost-groups", "POST", { name: a.name, cost_type: a.cost_type });
         groups.push({ id: b.group.id, name: b.group.name });
         out.push({ ok: true, text: `Made group “${a.name}”` });
+      } else if (a.do === "update_line") {
+        const ln = byRef(look.lines ?? [], a.line);
+        if (!jobId || !ln) { out.push({ ok: false, text: `Line ${a.line} isn't on this budget — skipped` }); continue; }
+        const body: Record<string, unknown> = {};
+        if (a.name) body.name = a.name;
+        if ("unit_cost" in a) body.unit_cost = a.unit_cost;
+        if ("qty" in a) { if (a.qty === null) body.qty_source = "rule"; else body.quantity = a.qty; }
+        if (a.estimate) body.description = markEstimate(ln.description ?? null, a.estimate);
+        await call(`/api/jobs/${jobId}/budget/lines/${ln.id}`, "PATCH", body);
+        out.push({ ok: true, text: `Changed ${a.name ?? ln.name}${"unit_cost" in a ? ` — unit cost ${a.unit_cost === null ? "cleared" : `$${a.unit_cost}`}` : ""}${"qty" in a ? `, quantity ${a.qty ?? "from its rule"}` : ""}` });
       } else if (a.do === "update_item") {
         const it = byRef(look.items, a.item);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }

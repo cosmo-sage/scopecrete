@@ -824,7 +824,7 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     out.push(`AREA ${secName(a)}: cost $${sum("ext_cost").toFixed(2)}, O.H. $${sum("overhead").toFixed(2)}, price $${sum("ext_price").toFixed(2)}${rs.some((r) => r.blocked.length) ? " (partial — some lines blocked)" : ""}`);
     for (const l of ls) {
       const r = res.lines[l.id];
-      out.push(`  - ${l.name}: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
+      out.push(`  - line ${String(l.id).slice(0, 8)} ${l.name}: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
         `${r.qty} ${l.unit ?? ""} (${r.qty_note ?? ""}) × $${l.unit_cost} = cost $${(r.ext_cost ?? 0).toFixed(2)}; O.H. $${(r.overhead ?? 0).toFixed(2)}; margin ${r.margin_pct}% (${r.margin_from}) → price $${(r.ext_price ?? 0).toFixed(2)}`}`);
     }
   }

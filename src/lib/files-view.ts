@@ -15,7 +15,7 @@ import type { FileFilter } from "./files-filter.ts";
 /** The folder menu's fixed folders: [category key, label]. "" is All files. */
 export const CATEGORY_FOLDERS: Array<[string, string]> = [
   ["plan", "Plans"], ["spec", "Specs"], ["bid", "Bid invites"], ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"],
-  ["contract", "Contracts"], ["photo", "Photos (filed)"], ["proposal", "Proposals"], ["email", "Emails"], ["other", "Other"], ["unfiled", "Unfiled"],
+  ["contract", "Contracts"], ["w9", "W-9"], ["photo", "Photos (filed)"], ["proposal", "Proposals"], ["email", "Emails"], ["other", "Other"], ["unfiled", "Unfiled"],
 ];
 
 export type Folder =

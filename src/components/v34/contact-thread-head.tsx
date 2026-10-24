@@ -1,5 +1,6 @@
 "use client";
 
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Phone, Envelope, NotePencil, Funnel, MagnifyingGlass, X } from "@phosphor-icons/react";
@@ -95,6 +96,7 @@ export interface HeadProps {
 
 export function ContactThreadHead(p: HeadProps) {
   const [open, setOpen] = useState<null | "phone" | "email" | "more">(null);
+  const moreBox = useDismiss(open === "more", () => setOpen(null));
   const close = () => setOpen(null);
   const [reading, setReading] = useReading();
   const hue = initialsHue(p.name) ?? T.ink3;
@@ -169,7 +171,7 @@ export function ContactThreadHead(p: HeadProps) {
             </Popover>
           )}
         </div>
-        <div className="relative">
+        <div className="relative" ref={moreBox}>
           <button onClick={() => setOpen((o) => (o === "more" ? null : "more"))} aria-expanded={open === "more"} aria-label="More" title="More" style={round(open === "more")}>
             <span style={{ fontSize: 18, lineHeight: 1, letterSpacing: 1 }}>⋯</span>
           </button>

@@ -87,6 +87,8 @@ interface Task {
 export interface RecordExtras {
   tabs?: Array<{ key: string; label: string; render: () => React.ReactNode }>;
   actions?: RecordAction[];
+  /** Rows the page adds to the ⋯ menu (a vendor's App access). */
+  menu?: RecordAction[];
   onEdit?: () => void;
   facts?: { title: string; rows: Array<[string, string | null, string?]> };
   address?: string | null;
@@ -211,13 +213,15 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
     { label: "Edit", onClick: edit },
     ...(extra?.actions ?? []),
     ...(!isVendor ? [{ label: "New job", primary: true, onClick: () => void newJob() }] : []),
-    ASK_DUSTY,
+    // No Ask Dusty on a vendor's page (Coy, 2026-10-24: "Remove the ask dusty button").
+    ...(isVendor ? [] : [ASK_DUSTY]),
   ];
   const menu: Array<RecordAction | React.ReactElement> = [
     // No Call notes on a vendor's ☰ (Coy, 2026-10-11).
     ...(isVendor ? [] : [{ label: "Call notes", title: "Notes while you're on the phone — they land on the call", onClick: () => setCallNotes(true) }]),
     { label: c.bucket ? "Change bucket" : "File as…", onClick: () => setFiling(true) },
     { label: "Same person as…", onClick: () => onMerge() },
+    ...(extra?.menu ?? []),
     isVendor
       ? <ArchiveButton key="del" kind="contact" id={c.id} action="delete" vendor what={title} then="/dashboard/vendors" style={{ ...menuItem, color: T.red }}>Delete vendor</ArchiveButton>
       : <ArchiveButton key="arch" kind="contact" id={c.id} action="archive" what={title} then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>,
@@ -226,7 +230,6 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
   const tabs: Array<[string, string]> = [
     ["overview", "Overview"],
     ...(isVendor ? [] : [["steps", `Next steps ${openSteps}`] as [string, string]]),
-    ["steps", `Next steps ${openSteps}`],
     ["jobs", `Jobs ${jobCount}`],
     ["threads", `Threads ${theirThreads.length + 1}`],
     ["timeline", "Timeline"],

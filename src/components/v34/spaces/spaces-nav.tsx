@@ -530,13 +530,30 @@ function useChannels(onPick: () => void, on = true) {
 function VendorTrades({ onPick }: { onPick: () => void }) {
   const f = useVendorFilter();
   if (!f.trades) return null;
-  const item = (key: string, label: string, n: number, on: boolean, act: () => void) => (
+  const item = (key: string, label: string, n: number, on: boolean, act: () => void, indent = 40, strong = false) => (
     <button key={key} type="button" className="sc-space-row" aria-current={on ? "true" : undefined} onClick={() => { act(); onPick(); }}
-      style={{ paddingLeft: 40, border: 0, width: "100%", background: on ? undefined : "none", textAlign: "left", cursor: "pointer", minHeight: 30 }}>
-      <span className="sc-space-row-l" style={{ flex: 1, fontWeight: on ? 600 : 400 }}>{label}</span>
+      style={{ paddingLeft: indent, border: 0, width: "100%", background: on ? undefined : "none", textAlign: "left", cursor: "pointer", minHeight: 30 }}>
+      <span className="sc-space-row-l" style={{ flex: 1, fontWeight: on || strong ? 600 : 400 }}>{label}</span>
       <span className="sc-space-row-s" style={{ fontVariantNumeric: "tabular-nums" }}>{n}</span>
     </button>
   );
+  // Kind → trade (Settings → Vendors, Coy 2026-10-24: "buckets inside of buckets").
+  if (f.groups && f.groups.length) {
+    const all = f.kinds.find((k) => k.k === "all");
+    return (
+      <div role="group" aria-label="Vendors by kind and trade">
+        {all && item("all", "All vendors", all.n, f.sub === "all" && f.trade === "All", () => setVendorFilter({ sub: "all", trade: "All" }), 40, true)}
+        {f.groups.map((g) => (
+          <React.Fragment key={g.k ?? "other"}>
+            {g.k ? item(`k:${g.k}`, g.label, g.n, f.sub === g.k && f.trade === "All", () => setVendorFilter({ sub: g.k!, trade: "All" }), 40, true)
+              : <div className="sc-space-row-s" style={{ padding: "8px 0 2px 40px", textTransform: "uppercase", letterSpacing: ".06em", fontSize: 10 }}>{g.label}</div>}
+            {g.trades.map((t) => item(`t:${g.k}:${t.trade}`, t.trade, t.n, f.trade === t.trade, () => setVendorFilter({ trade: t.trade, sub: "all" }), 54))}
+          </React.Fragment>
+        ))}
+        <Link href="/dashboard/settings/vendors" onClick={onPick} className="sc-space-row-s" style={{ display: "block", padding: "6px 0 4px 40px", fontSize: 11 }}>Edit kinds &amp; trades →</Link>
+      </div>
+    );
+  }
   return (
     <div role="group" aria-label="Vendors by trade">
       {f.trades.map((t) => item(`t:${t.trade}`, t.trade, t.n, f.trade === t.trade, () => setVendorFilter({ trade: t.trade })))}

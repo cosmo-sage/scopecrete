@@ -410,13 +410,20 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
 async function vendorBlock(sb: Sb, orgId: string, contactId: string): Promise<Block | null> {
   const { data: c } = await sb.from("contacts").select("contact_type, contact_subtype, service_area").eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c || c.contact_type !== "vendor") return null;
+  // Their trades (091) and 1099 (129), read apart so a missing column never hides the rest.
+  const [{ data: tr }, { data: tx }] = await Promise.all([
+    sb.from("contacts").select("trades").eq("org_id", orgId).eq("id", contactId).maybeSingle(),
+    sb.from("contacts").select("is_1099").eq("org_id", orgId).eq("id", contactId).maybeSingle(),
+  ]);
+  const trades = ((tr as { trades?: string[] | null } | null)?.trades ?? []);
+  const is1099 = (tx as { is_1099?: boolean | null } | null)?.is_1099;
   const [{ data: prices }, { data: jobs }] = await Promise.all([
     sb.from("cost_item_sources").select("unit_cost, unit, vendor_sku, price_as_of, price_source, item:cost_items!cost_item_sources_cost_item_id_fkey(id, name, unit, default_source_id, active)")
       .eq("org_id", orgId).eq("vendor_contact_id", contactId).eq("active", true).limit(150),
     sb.from("job_vendors").select("role, job:jobs!inner(title, status, archived_at)").eq("org_id", orgId).eq("contact_id", contactId).limit(50),
   ]);
   type P = { unit_cost: unknown; unit: string | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null; item: { name: string; unit: string | null; active: boolean } | null };
-  const lines = [`Kind: ${(c.contact_subtype as string | null) ?? "vendor"}${c.service_area ? ` · delivers ${c.service_area}` : ""}`];
+  const lines = [`Kind: ${(c.contact_subtype as string | null) ?? "vendor"}${trades.length ? ` · trades: ${trades.join(", ")}` : ""}${c.service_area ? ` · delivers ${c.service_area}` : ""}${is1099 === true ? " · gets a 1099" : is1099 === false ? " · no 1099" : ""}`];
   const ps = ((prices ?? []) as unknown as P[]).filter((p) => p.item?.active !== false);
   lines.push(ps.length ? `Their prices in the Price book (${ps.length}):` : "No prices in the Price book yet.");
   for (const p of ps) lines.push(`- ${p.item?.name ?? "item"}: ${p.unit_cost === null ? "no price" : `$${Number(p.unit_cost)}`}/${p.unit ?? p.item?.unit ?? "unit"}${p.vendor_sku ? ` · #${p.vendor_sku}` : ""}${p.price_as_of ? ` · ${p.price_as_of}` : ""}${p.price_source ? ` (${p.price_source})` : ""}`);

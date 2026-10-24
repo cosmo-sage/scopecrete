@@ -24,6 +24,8 @@ import { call, dateLabel, CostCards } from "@/components/v34/cost-cards";
 import { PersonScreen, type Person, type RecordExtras } from "@/components/v34/person-view";
 import { Empty, panelTitle } from "@/components/v34/record-page";
 import { ReceiptImport } from "@/components/v34/receipt-import";
+import { sendBytes } from "@/components/v34/files-panel";
+import { draftKey } from "@/lib/v34/send-proposal";
 import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { ContactPicker } from "@/components/v34/contacts";
@@ -31,7 +33,9 @@ import { BidComposer } from "@/components/v34/bids/bid-composer";
 import { BulkBar, send, type BulkEdit } from "@/components/v34/bulk-bar";
 import { withTrade } from "@/lib/bulk";
 import { websiteLabel } from "@/lib/vendor-website";
-import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
+import { bidStats, cleanTrades, hasTrade, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
+import { groupTrades, withVendorTrades, type Kind } from "@/lib/vendor-taxonomy";
+import { kindLabel, useVendorTaxonomy } from "@/lib/v34/use-vendor-taxonomy";
 import { clearVendorFilter, setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 
 interface VRow {
@@ -40,8 +44,9 @@ interface VRow {
   trades?: string[]; crew_size?: number | null; website?: string | null;
   bids?: { sent: number; answered: number; median_hours: number | null; label: string; speed: string | null };
 }
-const SUBTYPES: Array<[string, string]> = [["all", "All"], ["supplier", "Suppliers"], ["subcontractor", "Subs"], ["equipment", "Equipment"]];
-const SUB_LABEL: Record<string, string> = { supplier: "Supplier", subcontractor: "Sub", equipment: "Equipment", looking_for_work: "Looking for work", lead_gen: "Lead gen" };
+/** The vendor kinds as Kind picker options (Settings → Vendors), with the vendor's own if it was switched off since. */
+const kindOptions = (kinds: Kind[], current?: string | null) =>
+  [...kinds, ...(current && !kinds.some((k) => k.slug === current) ? [{ slug: current, label: kindLabel(kinds, current) ?? current }] : [])];
 const label = (v: { name: string | null; company_name?: string | null; phone: string | null }) => v.name || v.company_name || formatPhone(v.phone);
 const SORTS: Array<[string, string]> = [["name", "Name"], ["fastest", "Answers fastest"], ["prices", "Most prices"]];
 const daysAgo = (iso: string | null) => (iso ? Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 86_400_000)) : null);
@@ -117,14 +122,25 @@ export function VendorList() {
     return () => { off = true; };
   }, [tick]);
 
-  const trades = useMemo(() => tradeCounts(rows ?? []).filter((t) => t.n > 0), [rows]);
+  // Kinds and trades are the org's own (Settings → Vendors; Coy, 2026-10-24: "buckets inside of buckets").
+  const tax = useVendorTaxonomy();
+  const SUBS: Array<[string, string]> = useMemo(() => [["all", "All"], ...tax.kinds.map((k) => [k.slug, k.label] as [string, string])], [tax.kinds]);
+  const allTrades = useMemo(() => withVendorTrades(tax.trades, rows ?? []), [tax.trades, rows]);
+  const trades = useMemo(() => allTrades.filter((t) => (t.n ?? 0) > 0).map((t) => ({ trade: t.name, n: t.n ?? 0 })), [allTrades]);
+  // Each kind with the trades under it, only those with vendors (a kind shows if it has vendors or trades with some).
+  const groups = useMemo(() => groupTrades(tax.kinds, allTrades.filter((t) => (t.n ?? 0) > 0)).map((g) => ({
+    k: g.kind?.slug ?? null, label: g.kind?.label ?? "Other trades",
+    n: g.kind ? (rows ?? []).filter((v) => v.subtype === g.kind!.slug).length : 0,
+    trades: g.trades.map((t) => ({ trade: t.name, n: t.n ?? 0 })),
+  })).filter((g) => g.n > 0 || g.trades.length > 0), [tax.kinds, allTrades, rows]);
   useEffect(() => {
     if (!rows) return;
     setVendorFilter({
       trades: [{ trade: "All", n: rows.length }, ...trades],
-      kinds: SUBTYPES.map(([k, l]) => ({ k, label: l, n: k === "all" ? rows.length : rows.filter((v) => v.subtype === k).length })),
+      kinds: SUBS.map(([k, l]) => ({ k, label: l, n: k === "all" ? rows.length : rows.filter((v) => v.subtype === k).length })),
+      groups,
     });
-  }, [rows, trades]);
+  }, [rows, trades, SUBS, groups]);
   useEffect(() => () => clearVendorFilter(), []);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -142,9 +158,9 @@ export function VendorList() {
   const groupText = () => { if (phones.length) window.location.assign(`sms:${phones.join(",")}`); };
   // Bulk edit (Coy, 2026-10-22): the kind, or a trade added or taken off, on every ticked vendor.
   const tradesOf = (id: string) => (rows ?? []).find((v) => v.id === id)?.trades ?? [];
-  const tradeOpts = [...new Set([...TRADES, ...picked.flatMap((v) => v.trades ?? [])])].map((t) => ({ k: t, label: t }));
+  const tradeOpts = [...new Set([...allTrades.map((t) => t.name), ...picked.flatMap((v) => v.trades ?? [])])].map((t) => ({ k: t, label: t }));
   const bulkEdits = ([
-    { k: "kind", label: "Kind", options: SUBTYPES.filter(([k]) => k !== "all").map(([k, l]) => ({ k, label: l.replace(/s$/, "") })),
+    { k: "kind", label: "Kind", options: tax.kinds.map((k) => ({ k: k.slug, label: k.label })),
       apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { subtype: v }); }, did: (l) => `Set {n} to ${l}` },
     { k: "trade+", label: "Add a trade", options: tradeOpts,
       apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { trades: withTrade(tradesOf(id), v, true) }); }, did: (l) => `Added ${l} to {n}` },
@@ -153,29 +169,26 @@ export function VendorList() {
   ] as BulkEdit[]).filter((e) => e.options.length > 0);
   const countLabel = trade === "All" ? (rows ? `${shown.length}` : null) : `${shown.length} ${trade.toLowerCase()}`;
 
+  const listBtn = (key: string, text: string, n: number, on: boolean, act: () => void, indent: number, strong?: boolean) => (
+    <button key={key} onClick={act} className="flex items-center gap-2 text-left"
+      style={{ height: strong ? 30 : 28, padding: `0 10px 0 ${indent}px`, background: on ? T.sunk : "transparent", borderLeft: `3px solid ${on ? T.hiviz : "transparent"}`,
+        color: on ? T.ink : strong ? T.ink : T.ink2, fontWeight: on || strong ? 600 : 400, fontSize: F.sm, cursor: "pointer" }}>
+      <span style={{ flex: 1, ...clip }}>{text}</span><span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{n}</span>
+    </button>
+  );
   const tradeList = (
-    <nav aria-label="Trade" className="flex flex-col" style={{ width: 200 }}>
-      <div style={{ ...eyebrow, padding: "4px 10px" }}>Trade</div>
-      {[{ trade: "All", n: rows?.length ?? 0 }, ...trades].map((t) => {
-        const on = t.trade === trade;
-        return (
-          <button key={t.trade} onClick={() => setTrade(t.trade)} className="flex items-center gap-2 text-left"
-            style={{ height: 30, padding: "0 10px", background: on ? T.sunk : "transparent", borderLeft: `3px solid ${on ? T.hiviz : "transparent"}`, color: on ? T.ink : T.ink2, fontWeight: on ? 600 : 400, fontSize: F.sm, cursor: "pointer" }}>
-            <span style={{ flex: 1, ...clip }}>{t.trade}</span><span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{t.n}</span>
-          </button>
-        );
-      })}
+    <nav aria-label="Kind and trade" className="flex flex-col" style={{ width: 210 }}>
+      <div style={{ ...eyebrow, padding: "4px 10px" }}>Kind · trade</div>
+      {listBtn("all", "All vendors", rows?.length ?? 0, sub === "all" && trade === "All", () => setVendorFilter({ sub: "all", trade: "All" }), 10, true)}
+      {groups.map((g) => (
+        <React.Fragment key={g.k ?? "none"}>
+          {g.k ? listBtn(`k:${g.k}`, g.label, g.n, sub === g.k && trade === "All", () => setVendorFilter({ sub: g.k!, trade: "All" }), 10, true)
+            : <div style={{ ...eyebrow, padding: "8px 10px 2px" }}>{g.label}</div>}
+          {g.trades.map((t) => listBtn(`t:${g.k}:${t.trade}`, t.trade, t.n, trade === t.trade, () => setVendorFilter({ trade: t.trade, sub: "all" }), 24))}
+        </React.Fragment>
+      ))}
       {rows && !trades.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: "6px 10px", lineHeight: 1.4 }}>{ready ? "No trades yet — open a vendor and add theirs in Edit." : "Trades need migration 091 — say \"apply 091\"."}</div>}
-      <div style={{ ...eyebrow, padding: "14px 10px 4px" }}>Kind</div>
-      {SUBTYPES.map(([k, l]) => {
-        const on = sub === k, n = k === "all" ? rows?.length ?? 0 : (rows ?? []).filter((v) => v.subtype === k).length;
-        return (
-          <button key={k} onClick={() => setSub(k)} className="flex items-center gap-2 text-left"
-            style={{ height: 28, padding: "0 10px", background: on ? T.sunk : "transparent", color: on ? T.ink : T.ink2, fontWeight: on ? 600 : 400, fontSize: F.sm, cursor: "pointer" }}>
-            <span style={{ flex: 1 }}>{l}</span><span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{n}</span>
-          </button>
-        );
-      })}
+      <Link href="/dashboard/settings/vendors" style={{ fontSize: F.xs, color: T.chalk, padding: "10px 10px 0" }}>Edit kinds &amp; trades →</Link>
     </nav>
   );
 
@@ -200,7 +213,7 @@ export function VendorList() {
       </span>
     );
   };
-  const subLine = (v: VRow) => [v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null, v.crew_size ? `crew of ${v.crew_size}` : null, v.service_area].filter(Boolean).join(" · ");
+  const subLine = (v: VRow) => [kindLabel(tax.kinds, v.subtype), v.crew_size ? `crew of ${v.crew_size}` : null, v.service_area].filter(Boolean).join(" · ");
 
   return (
     <>
@@ -230,11 +243,11 @@ export function VendorList() {
           {(trade !== "All" || sub !== "all") && (
             <button type="button" className="shrink-0 rounded px-2.5 sc-spaces-only" onClick={() => setVendorFilter({ trade: "All", sub: "all" })}
               style={{ height: 30, background: T.ink, color: T.card, border: `1px solid ${T.ink}`, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-              {[trade !== "All" ? trade : null, sub !== "all" ? SUB_LABEL[sub] ?? sub : null].filter(Boolean).join(" · ")} ×
+              {[trade !== "All" ? trade : null, sub !== "all" ? kindLabel(tax.kinds, sub) : null].filter(Boolean).join(" · ")} ×
             </button>
           )}
           <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" className="sc-old-nav-only" style={{ ...field, width: "auto", height: 30 }}>
-            {SUBTYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {SUBS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
             {SORTS.map(([k, l]) => <option key={k} value={k}>Sort · {l}</option>)}
@@ -301,7 +314,7 @@ export function VendorList() {
                       <div style={{ flex: 1, minWidth: 0, color: T.ink }}>
                         <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{label(v)}</div>
                         <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>
-                          {[(v.trades ?? []).join(" · ") || (v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null), v.bids?.speed ?? (v.bids?.sent ? v.bids.label : null)].filter(Boolean).join(" · ") || "—"}
+                          {[(v.trades ?? []).join(" · ") || kindLabel(tax.kinds, v.subtype), v.bids?.speed ?? (v.bids?.sent ? v.bids.label : null)].filter(Boolean).join(" · ") || "—"}
                         </div>
                       </div>
                       <span style={{ fontSize: 10.5, color: T.ink3, whiteSpace: "nowrap" }}>{v.phone && v.email ? "Text · Email" : v.phone ? "Text only" : v.email ? "Email only" : "—"}</span>
@@ -335,26 +348,49 @@ export function VendorList() {
   );
 }
 
-/** A vendor's trades: tap the common ones, or type another (Vendors v2, migration 091). */
-function TradePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+/**
+ * A vendor's trades: tap the org's own (Settings → Vendors), grouped by kind with the vendor's own
+ * kind first, or type another (Vendors v2, migration 091).
+ */
+function TradePicker({ value, onChange, kind }: { value: string[]; onChange: (v: string[]) => void; kind?: string | null }) {
   const [other, setOther] = useState("");
-  const extra = value.filter((t) => !TRADES.some((k) => k.toLowerCase() === t.toLowerCase()));
+  const tax = useVendorTaxonomy();
+  const known = tax.trades.map((t) => t.name);
+  const extra = value.filter((t) => !known.some((k) => k.toLowerCase() === t.toLowerCase()));
+  const groups = groupTrades(tax.kinds, [...tax.trades, ...extra.map((name) => ({ name, kind: null }))]).filter((g) => g.trades.length)
+    .sort((a, b) => Number((b.kind?.slug ?? null) === kind) - Number((a.kind?.slug ?? null) === kind));
   const flip = (t: string) => onChange(value.some((x) => x.toLowerCase() === t.toLowerCase()) ? value.filter((x) => x.toLowerCase() !== t.toLowerCase()) : cleanTrades([...value, t]));
   return (
     <div>
       <span style={eyebrow}>Trades</span>
-      <div className="flex flex-wrap gap-1 mt-1">
-        {[...TRADES, ...extra].map((t) => {
-          const on = value.some((x) => x.toLowerCase() === t.toLowerCase());
-          return <button key={t} type="button" onClick={() => flip(t)} style={{ height: 26, padding: "0 8px", borderRadius: 3, fontSize: F.xs, border: `1px solid ${on ? T.ink : T.hairStrong}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" }}>{t}</button>;
-        })}
-      </div>
+      {groups.map((g) => (
+        <div key={g.kind?.slug ?? "none"} className="mt-1">
+          <div style={{ fontSize: 10, color: T.ink3 }}>{g.kind?.label ?? "Other trades"}</div>
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {g.trades.map((t) => {
+              const on = value.some((x) => x.toLowerCase() === t.name.toLowerCase());
+              return <button key={t.name} type="button" onClick={() => flip(t.name)} style={{ height: 26, padding: "0 8px", borderRadius: 3, fontSize: F.xs, border: `1px solid ${on ? T.ink : T.hairStrong}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" }}>{t.name}</button>;
+            })}
+          </div>
+        </div>
+      ))}
       <div className="flex gap-1 mt-1">
         <input value={other} onChange={(e) => setOther(e.target.value)} placeholder="Another trade" aria-label="Another trade" style={{ ...field, height: 30 }}
           onKeyDown={(e) => { if (e.key === "Enter" && other.trim()) { e.preventDefault(); onChange(cleanTrades([...value, other])); setOther(""); } }} />
         <button type="button" disabled={!other.trim()} onClick={() => { onChange(cleanTrades([...value, other])); setOther(""); }} style={{ ...btn(false), height: 30, opacity: other.trim() ? 1 : 0.5 }}>Add</button>
       </div>
+      <Link href="/dashboard/settings/vendors" style={{ fontSize: 10, color: T.chalk }}>Edit the list of kinds &amp; trades →</Link>
     </div>
+  );
+}
+
+/** The vendor's kind, from the org's list (Settings → Vendors). */
+function KindSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const tax = useVendorTaxonomy();
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={field} aria-label="Kind">
+      {kindOptions(tax.kinds, value).map((k) => <option key={k.slug} value={k.slug}>{k.label}</option>)}
+    </select>
   );
 }
 
@@ -382,10 +418,8 @@ function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: stri
             <input value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} style={field} aria-label={l} /></label>
         ))}
         <label className="block"><span style={eyebrow}>Kind</span>
-          <select value={d.subtype} onChange={(e) => setD({ ...d, subtype: e.target.value })} style={field} aria-label="Kind">
-            <option value="supplier">Supplier</option><option value="equipment">Equipment rental</option><option value="subcontractor">Subcontractor</option>
-          </select></label>
-        <TradePicker value={d.trades} onChange={(trades) => setD({ ...d, trades })} />
+          <KindSelect value={d.subtype} onChange={(subtype) => setD({ ...d, subtype })} /></label>
+        <TradePicker value={d.trades} kind={d.subtype} onChange={(trades) => setD({ ...d, trades })} />
         {err && <div style={{ fontSize: F.sm, color: T.red }}>{err}{existing && <> <Link href={`/dashboard/messages/${existing.id}`} style={{ color: T.chalk }}>Open {existing.name ?? "them"}</Link></>}</div>}
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} style={btn(false)}>Cancel</button>
@@ -406,7 +440,9 @@ interface Price {
 }
 interface VFile { id: string; name: string; category: string | null; read_state: string | null; summary: string | null; created_at: string; url: string | null; facts: Record<string, unknown> | null }
 interface VPage {
-  vendor: VRow & { contact_type: string; status_summary: string | null };
+  vendor: VRow & { contact_type: string; status_summary: string | null;
+    /** 1099 and the W-9 asked for (migration 129); missing says why they can't be set yet. */
+    is_1099?: boolean | null; w9_requested_at?: string | null; missing?: string | null };
   prices: Price[]; files: VFile[]; jobs: Array<{ id: string; title: string | null; status: string; address: string | null; role: string | null }>; messages: number;
   /** Their account (a customers row) and its people; absent on an older server. */
   account?: { id: string; name: string | null; relation: string } | null;
@@ -488,6 +524,7 @@ export function VendorPage({ id }: { id: string }) {
   const [bids, setBids] = useState<BidReq[] | null>(null);
   const [bidsMissing, setBidsMissing] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+  const tax = useVendorTaxonomy();
 
   useEffect(() => {
     let off = false;
@@ -513,6 +550,7 @@ export function VendorPage({ id }: { id: string }) {
   const back = { href: "/dashboard/vendors", label: "Vendors" };
   const v = p?.vendor;
   const receipts = p ? p.files.filter((f) => f.category === "receipt" || f.category === "vendor_quote").length : 0;
+  const w9s = p ? p.files.filter((f) => f.category === "w9").length : 0;
   const mine = (bids ?? []).flatMap((r) => r.recipients.filter((x) => x.contact_id === id).map((x) => ({ ...x, req: r })));
   const stats = bidStats(mine);
   const extra: RecordExtras = {
@@ -521,10 +559,13 @@ export function VendorPage({ id }: { id: string }) {
       { key: "people", label: `People ${p?.people ? p.people.length : ""}`.trim(), render: () => p ? <VendorPeople p={p} vendorId={id} onSaved={() => setTick((n) => n + 1)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "prices", label: `Cost book ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "tax", label: `1099 & W-9${w9s ? ` ${w9s}` : ""}`, render: () => p ? <VendorTax p={p} onSaved={(m) => { if (m) setNote(m); setTick((n) => n + 1); }} /> : <Empty text={err ?? "Loading…"} /> },
     ],
     actions: [
-      { label: "+ Receipt or quote", onClick: () => setReceipt(true) },
       ...(v?.website ? [{ label: "Website ↗", onClick: () => { window.open(v.website!, "_blank", "noopener,noreferrer"); } }] : []),
+    ],
+    // App access lives in ⋯ (Coy, 2026-10-24: "Put this in the hamburger menu on the right").
+    menu: [
       { label: "App access", onClick: () => {
         // Settings → People opens with this vendor picked for an invite (081).
         try { sessionStorage.setItem(PENDING_VENDOR_KEY, JSON.stringify({ contact_id: id, email: v?.email ?? null })); } catch {}
@@ -534,10 +575,11 @@ export function VendorPage({ id }: { id: string }) {
     onEdit: () => setEditing(true),
     ...(v && p ? {
       address: v.address,
-      meta: [(v.trades ?? []).length ? (v.trades ?? []).join(" · ") : v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : "Vendor", v.crew_size ? `crew of ${v.crew_size}` : null,
+      meta: [(v.trades ?? []).length ? (v.trades ?? []).join(" · ") : v.subtype ? kindLabel(tax.kinds, v.subtype) : "Vendor", v.is_1099 ? "1099" : null, v.crew_size ? `crew of ${v.crew_size}` : null,
         v.service_area ? `works ${v.service_area}` : null, stats.sent ? stats.label : null, `${p.prices.length} price${p.prices.length === 1 ? "" : "s"}`],
       facts: { title: "Vendor", rows: [
-        ["Kind", v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null],
+        ["Kind", v.subtype ? kindLabel(tax.kinds, v.subtype) : null],
+        ["1099", v.is_1099 == null ? null : v.is_1099 ? "Yes — send them a 1099" : "No", v.is_1099 == null ? "— needs migration 129" : undefined],
         ["Website", v.website ? websiteLabel(v.website) : null, "— add it in Edit"],
         ["Trades", (v.trades ?? []).length ? (v.trades ?? []).join(", ") : null, "— add them in Edit"],
         ["Crew", v.crew_size ? `${v.crew_size}` : null],
@@ -668,12 +710,17 @@ function VendorPrices({ p, onDefault }: { p: VPage; onDefault: (pr: Price) => vo
     </div>
   );
   return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 900 }}>
+    <div className="p-4 flex flex-col gap-3">
       <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+        <div className="flex items-center gap-2 px-3 py-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
           <h3 style={{ ...panelTitle, flex: 1 }}>Their cost book · {p.prices.length} item{p.prices.length === 1 ? "" : "s"} in {vendorGroups(p.prices).length} group{vendorGroups(p.prices).length === 1 ? "" : "s"}</h3>
           {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find in their cost book" style={{ ...field, width: 160, height: 28 }} />}
+          <button onClick={() => setCards((x) => !x)} aria-expanded={cards} className="rounded-full px-3 inline-flex items-center gap-1.5"
+            style={{ height: 30, fontSize: F.sm, fontWeight: 700, background: cards ? T.ink : T.hiviz, color: cards ? T.card : T.onHiviz, cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,.18)" }}>
+            <span aria-hidden style={{ fontSize: 14 }}>{cards ? "×" : "✎"}</span>{cards ? "Done editing" : "Add or edit items"}
+          </button>
         </div>
+        {cards && <div className="px-3 py-3" style={{ borderBottom: `1px solid ${T.hairSoft}`, background: T.sunk }}><CostCards vendorId={p.vendor.id} vendorName={label(p.vendor)} /></div>}
         {prices.length === 0 ? (
           <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5 }}>
             {p.prices.length ? "Nothing matches." : "No prices yet. Add a receipt or quote and Dusty reads their prices; or add them to an item in the Price book."}
@@ -693,10 +740,6 @@ function VendorPrices({ p, onDefault }: { p: VPage; onDefault: (pr: Price) => vo
           ★ = their price is the one budgets use for that item. Groups are your Price book&apos;s. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
         </div>
       </section>
-      <div>
-        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Add or edit items in their cost book</button>
-        {cards && <div className="mt-2"><CostCards vendorId={p.vendor.id} vendorName={label(p.vendor)} /></div>}
-      </div>
     </div>
   );
 }
@@ -712,34 +755,130 @@ function vendorGroups(prices: Price[]): Array<[string, Price[]]> {
   return [...m.entries()].sort(([a], [b]) => (a === "No group" ? 1 : b === "No group" ? -1 : a.localeCompare(b)));
 }
 
-/** Receipts & quotes filed on them, what Dusty read off each, and Import prices from one. */
+/**
+ * Receipts & quotes filed on them, the page's width (Coy, 2026-10-24: "a new section that shows all the
+ * receipts listed and the ability to upload more"), what Dusty read off each, and Import prices from one.
+ */
 function VendorReceipts({ p, onImport }: { p: VPage; onImport: () => void }) {
+  const list = p.files.filter((f) => f.category === "receipt" || f.category === "vendor_quote");
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   return (
-    <div className="p-4" style={{ maxWidth: 900 }}>
+    <div className="p-4">
       <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-          <h3 style={{ ...panelTitle, flex: 1 }}>Receipts &amp; quotes</h3>
-          <button onClick={onImport} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Receipt or quote</button>
+          <h3 style={{ ...panelTitle, flex: 1 }}>Receipts &amp; quotes · {list.length}</h3>
+          <button onClick={onImport} className="rounded px-3" style={{ height: 30, fontSize: F.sm, fontWeight: 700, background: T.hiviz, color: T.onHiviz, cursor: "pointer" }}>↑ Upload a receipt or quote</button>
         </div>
-        {p.files.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None yet. Add a receipt or quote and Dusty reads who it&apos;s from and the prices.</div>
-          : p.files.slice(0, 20).map((f) => {
+        {list.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None yet. Upload a receipt or quote and Dusty reads who it&apos;s from and the prices.</div>
+          : list.map((f) => {
             const n = Array.isArray(f.facts?.price_lines) ? (f.facts?.price_lines as unknown[]).length : 0;
             return (
-              <div key={f.id} className="px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                <div className="flex items-baseline gap-2">
-                  {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{f.name}</a>
-                    : <span style={{ fontSize: F.sm, flex: 1, minWidth: 0, ...clip }}>{f.name}</span>}
-                  <span style={{ fontSize: 10, color: T.ink3 }}>{new Date(f.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              <div key={f.id} className="px-3 py-2 flex items-center gap-3" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                <span className="rounded px-1.5" style={{ fontSize: 10, fontWeight: 700, background: T.sunk, color: T.ink2, flex: "0 0 auto" }}>{f.category === "receipt" ? "RECEIPT" : "QUOTE"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: F.sm, color: T.ink, display: "block", ...clip }}>{f.name}</a>
+                    : <span style={{ fontSize: F.sm, display: "block", ...clip }}>{f.name}</span>}
+                  <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{f.read_state === "read" ? (n ? `${n} price line${n === 1 ? "" : "s"}${f.summary ? ` · ${f.summary}` : ""}` : f.summary ?? "read") : f.read_state === "failed" ? "couldn't read" : f.read_state === "skipped" ? "not readable" : "Dusty is reading it…"}</div>
                 </div>
-                <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{f.read_state === "read" ? (n ? `${n} price line${n === 1 ? "" : "s"}` : f.summary ?? "read") : f.read_state === "failed" ? "couldn't read" : f.read_state === "skipped" ? "not readable" : "reading…"}</div>
+                <span style={{ fontSize: 10, color: T.ink3, flex: "0 0 auto" }}>{day(f.created_at)}</span>
               </div>
             );
           })}
-        {p.files.some((f) => Array.isArray(f.facts?.price_lines)) && (
+        {list.some((f) => Array.isArray(f.facts?.price_lines)) && (
           <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
             <button onClick={onImport} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Import prices from one →</button>
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+const W9_FORM = "https://www.irs.gov/pub/irs-pdf/fw9.pdf";
+
+/**
+ * 1099 and W-9 (Coy, 2026-10-24: "toggle 1099 on/off so I know I need to send them a 1099" and "send a
+ * w9 and store access the w9 here … a new folder in the files pages called w9"). The switch is
+ * contacts.is_1099; a W-9 is a file on them filed W-9 (Files → W-9); Ask for a W-9 puts the words and
+ * the IRS form's link in their thread (or a new email), Coy sends it, and the day is kept. Migration 129.
+ */
+function VendorTax({ p, onSaved }: { p: VPage; onSaved: (note?: string) => void }) {
+  const router = useRouter();
+  const v = p.vendor;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const w9s = p.files.filter((f) => f.category === "w9");
+  const missing = v.missing ?? null;
+  const toggle = async () => {
+    setBusy("1099"); setErr(null);
+    try { await call(`/api/vendors/${v.id}`, "PATCH", { is_1099: !v.is_1099 }); onSaved(); }
+    catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  const upload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy("w9"); setErr(null);
+    try {
+      for (const f of Array.from(files)) {
+        const made = await call("/api/files", "POST", { name: f.name, mime: f.type, size: f.size, contact_id: v.id, category: "w9" }) as { file: { id: string }; upload: { signed_url: string } };
+        await sendBytes(made.upload.signed_url, f, () => {});
+        await call(`/api/files/${made.file.id}/done`, "POST");
+      }
+      onSaved(`W-9 saved on ${label(v)} — it's in Files → W-9 too.`);
+    } catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  const ask = async (via: "text" | "email") => {
+    setBusy(via); setErr(null);
+    const first = (v.name ?? "").split(/\s+/)[0] || "there";
+    const words = `Hi ${first}, before we pay you for work this year we need a W-9 on file. You can fill out the IRS form here: ${W9_FORM} — send a photo or the PDF back here. Thanks!`;
+    try {
+      await call(`/api/vendors/${v.id}`, "PATCH", { w9_requested: true }).catch(() => {});
+      if (via === "text") {
+        window.localStorage.setItem(draftKey(v.id), JSON.stringify({ channel: "text", text: words }));
+        router.push(`/dashboard/messages/${v.id}`);
+      } else {
+        const qs = new URLSearchParams({ contact: v.id, subject: "W-9 for our records", body: words });
+        if (v.email) qs.set("to", v.email);
+        router.push(`/dashboard/messages/email/new?${qs}`);
+      }
+    } catch (e) { setErr(String((e as Error).message)); setBusy(null); }
+  };
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      {missing && <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.sunDim, color: T.sun }}>{missing}</div>}
+      {err && <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.redDim, color: T.red }}>{err}</div>}
+      <section className="rounded px-3 py-3 flex items-center gap-3" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: F.sm, fontWeight: 700 }}>Send them a 1099</div>
+          <div style={{ fontSize: F.xs, color: T.ink3 }}>On for a contractor you pay $600 or more in a year. Dusty and the Vendors list show it.</div>
+        </div>
+        <button role="switch" aria-checked={!!v.is_1099} aria-label="Send them a 1099" onClick={() => void toggle()} disabled={!!missing || busy === "1099"}
+          style={{ width: 46, height: 26, borderRadius: 13, background: v.is_1099 ? T.green : T.hairStrong, position: "relative", cursor: missing ? "default" : "pointer", opacity: missing ? 0.5 : 1, flex: "0 0 auto" }}>
+          <span style={{ position: "absolute", top: 3, left: v.is_1099 ? 23 : 3, width: 20, height: 20, borderRadius: 10, background: T.card, transition: "left .15s" }} />
+        </button>
+      </section>
+      <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+        <div className="flex items-center gap-2 px-3 py-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+          <h3 style={{ ...panelTitle, flex: 1 }}>W-9 · {w9s.length}</h3>
+          <button onClick={() => void ask("text")} disabled={!!busy} className="rounded px-3" style={{ height: 30, fontSize: F.sm, fontWeight: 600, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>Ask for a W-9 by text</button>
+          <button onClick={() => void ask("email")} disabled={!!busy} className="rounded px-3" style={{ height: 30, fontSize: F.sm, fontWeight: 600, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>by email</button>
+          <label className="rounded px-3 inline-flex items-center" style={{ height: 30, fontSize: F.sm, fontWeight: 700, background: missing ? T.sunk : T.hiviz, color: missing ? T.ink3 : T.onHiviz, cursor: missing ? "default" : "pointer" }}>
+            {busy === "w9" ? "Saving…" : "↑ Upload their W-9"}
+            <input type="file" accept="application/pdf,image/*" multiple hidden disabled={!!missing || !!busy} onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
+        {v.w9_requested_at && <div className="px-3 py-1.5" style={{ fontSize: F.xs, color: T.ink3 }}>Asked for on {day(v.w9_requested_at)}.</div>}
+        {w9s.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>No W-9 on file. Ask for one — the words and the IRS form&apos;s link go in their thread for you to send — then upload what they send back.</div>
+          : w9s.map((f) => (
+            <div key={f.id} className="px-3 py-2 flex items-center gap-3" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+              {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{f.name}</a>
+                : <span style={{ fontSize: F.sm, flex: 1, minWidth: 0, ...clip }}>{f.name}</span>}
+              <span style={{ fontSize: 10, color: T.ink3 }}>{day(f.created_at)}</span>
+            </div>
+          ))}
+        <div className="px-3 py-2" style={{ fontSize: 10, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
+          Every vendor&apos;s W-9 is also in <Link href="/dashboard/files?cat=w9" style={{ color: T.chalk }}>Files → W-9</Link>. A W-9 carries their tax number — keep it here, not in a text.
+        </div>
       </section>
     </div>
   );
@@ -766,11 +905,8 @@ function EditVendor({ v, onClose, onSaved }: { v: VRow; onClose: () => void; onS
             <input value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} style={field} aria-label={l} /></label>
         ))}
         <label className="block"><span style={eyebrow}>Kind</span>
-          <select value={d.subtype} onChange={(e) => setD({ ...d, subtype: e.target.value })} style={field} aria-label="Kind">
-            <option value="supplier">Supplier</option><option value="equipment">Equipment rental</option><option value="subcontractor">Subcontractor</option>
-            <option value="looking_for_work">Looking for work</option>
-          </select></label>
-        <TradePicker value={d.trades} onChange={(trades) => setD({ ...d, trades })} />
+          <KindSelect value={d.subtype} onChange={(subtype) => setD({ ...d, subtype })} /></label>
+        <TradePicker value={d.trades} kind={d.subtype} onChange={(trades) => setD({ ...d, trades })} />
         <label className="block"><span style={eyebrow}>Crew size</span>
           <input value={d.crew_size} onChange={(e) => setD({ ...d, crew_size: e.target.value.replace(/[^0-9]/g, "") })} inputMode="numeric" style={{ ...field, width: 100 }} aria-label="Crew size" /></label>
         <div style={{ fontSize: 10, color: T.ink3 }}>Distance to a job comes later — for now, say where they deliver.</div>

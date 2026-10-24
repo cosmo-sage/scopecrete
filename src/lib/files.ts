@@ -10,11 +10,11 @@
 export const FILES_BUCKET = "job-files";
 export const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
-export const CATEGORIES = ["photo", "plan", "spec", "bid", "vendor_quote", "receipt", "contract", "other"] as const;
+export const CATEGORIES = ["photo", "plan", "spec", "bid", "vendor_quote", "receipt", "contract", "w9", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];
 export const CATEGORY_LABEL: Record<Category, string> = {
   photo: "Photo", plan: "Plans", spec: "Spec", bid: "Bid invite", vendor_quote: "Vendor quote",
-  receipt: "Receipt", contract: "Contract", other: "Other",
+  receipt: "Receipt", contract: "Contract", w9: "W-9", other: "Other",
 };
 
 export type FileKind = "pdf" | "image" | "video" | "doc" | "sheet" | "other";

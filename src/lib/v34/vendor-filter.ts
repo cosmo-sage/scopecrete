@@ -11,6 +11,8 @@ export interface VendorFilter {
   /** null while the Vendors list isn't open. */
   trades: Array<{ trade: string; n: number }> | null;
   kinds: Array<{ k: string; label: string; n: number }>;
+  /** Kinds with the trades under each (Settings → Vendors), for the drawer's nested list. */
+  groups?: Array<{ k: string | null; label: string; n: number; trades: Array<{ trade: string; n: number }> }>;
   trade: string;
   sub: string;
 }
@@ -25,7 +27,7 @@ export function setVendorFilter(patch: Partial<VendorFilter>) {
 }
 /** The page closed: the drawer folds its list away; the pick is forgotten. */
 export function clearVendorFilter() {
-  state = { trades: null, kinds: [], trade: "All", sub: "all" };
+  state = { trades: null, kinds: [], groups: [], trade: "All", sub: "all" };
   emit();
 }
 

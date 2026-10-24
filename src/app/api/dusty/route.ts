@@ -13,6 +13,7 @@ import { proposalSendLines } from "@/lib/proposal-send-server";
 import { budgetAsk, budgetQueries, cityOf, pageAsk, priceAsk, priceQueries, renderGoing, renderPages, renderPrices, renderResearch, renderWeb, researchAsk, researchQuery, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
 import { nameKeys } from "@/lib/dusty/mentions";
 import { readPages, searchWeb } from "@/lib/web-search-server";
+import { vendorDirectory } from "@/lib/vendor-taxonomy-server";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -187,6 +188,11 @@ export async function POST(req: NextRequest) {
       ctx.text += `\n\n${renderResearch({ query: researchQ, results: [], error: `the search failed (${(e as Error).message})`, today: "" })}`;
     }
   }
+  // Coy's own vendors by kind and trade, when he asks about one (Coy, 2026-10-24).
+  if (ask || /\b(vendors?|subs?|subcontractors?|suppliers?|crews?|1099|w-?9|who (sells|rents|does|pours|pumps))\b/i.test(question)) {
+    try { ctx.text += `\n\n${await vendorDirectory(supabase, orgId)}`; } catch { /* the rest still answers */ }
+  }
+
   if (ask) {
     try {
       let place: string | null = null;

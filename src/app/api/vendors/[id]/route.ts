@@ -6,6 +6,9 @@ import { cleanTrades } from "@/lib/bids";
 import { BIDS_MISSING, missing091 } from "@/lib/bids-server";
 import { cleanWebsite } from "@/lib/vendor-website";
 import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
+import { missing129 } from "@/lib/vendor-taxonomy-server";
+
+const TAX_MISSING = "The 1099 switch and W-9 requests need migration 129 — say \"apply 129\".";
 
 /**
  * One vendor's page (migration 051).
@@ -14,7 +17,7 @@ import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
  *   prices: every item this vendor prices — their price, date, where it came
  *   from, and whether they are that item's default (the price budgets use),
  *   with the cheapest other vendor for comparison.
- * PATCH { name?, phone?, email?, address?, service_area?, subtype?, trades?, crew_size? }
+ * PATCH { name?, phone?, email?, address?, service_area?, subtype?, trades?, crew_size?, is_1099?, w9_requested? }
  *   trades / crew_size need migration 091 (Vendors v2).
  *
  * Session client, org from the session (DECISIONS §7).
@@ -35,6 +38,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const v = missing091(first.error) ? ((await one(COLS)) as unknown as One).data : first.data;
   if (!v) return applyCookies(NextResponse.json({ error: "No such vendor." }, { status: 404 }));
   const website = (await readWebsites(supabase, orgId, [id])).get(id) ?? null;
+  // 1099 and the W-9 asked for (129) — null until it is applied.
+  const tx = await supabase.from("contacts").select("is_1099, w9_requested_at").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const tax = tx.error ? { is_1099: null, w9_requested_at: null, missing: missing129(tx.error) ? TAX_MISSING : tx.error.message }
+    : { is_1099: !!(tx.data as { is_1099?: boolean } | null)?.is_1099, w9_requested_at: (tx.data as { w9_requested_at?: string | null } | null)?.w9_requested_at ?? null, missing: null };
 
   // The vendor's account (a customers row, relation vendor or sub) and the people on it — Coy, 2026-10-21:
   // "a vendor account will have contacts inside it just like a customer account".
@@ -86,7 +93,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     group: r.item!.cost_group_id ? groupName.get(r.item!.cost_group_id) ?? null : null,
   })).sort((a, b) => a.item!.name.localeCompare(b.item!.name));
   return applyCookies(NextResponse.json({
-    vendor: { ...v, website, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },
+    vendor: { ...v, website, ...tax, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },
     prices,
     files: await signFiles(supabase, (files ?? []) as Array<Record<string, unknown>>),
     jobs: ((jobs ?? []) as unknown as Array<{ role: string | null; job: Record<string, unknown> }>).filter((j) => !j.job.archived_at).map((j) => ({ ...j.job, role: j.role })),
@@ -160,10 +167,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const r = await writeWebsite(supabase, orgId, userId, id, w);
     if (!r.ok) return bad(r.error ?? "Couldn't save the website.", 500);
   }
+  const taxPatch: Record<string, unknown> = {};
+  if ("is_1099" in b) taxPatch.is_1099 = b.is_1099 === true;
+  if ("w9_requested" in b) taxPatch.w9_requested_at = b.w9_requested ? new Date().toISOString() : null;
+  if (Object.keys(taxPatch).length) {
+    const { error } = await supabase.from("contacts").update(taxPatch).eq("org_id", orgId).eq("id", id);
+    if (error) return missing129(error) ? bad(TAX_MISSING, 503) : bad(error.message, 500);
+  }
   if ("subtype" in b && v.contact_type === "vendor") {
     const { error } = await supabase.rpc("sc_classify_contact", { p_contact: id, p_bucket: "vendor", p_subtype: text(b.subtype, 40) });
     if (error) return bad(error.message, 500);
-  } else if (!Object.keys(patch).length && !("website" in b)) return bad("Nothing to change.");
+  } else if (!Object.keys(patch).length && !Object.keys(taxPatch).length && !("website" in b)) return bad("Nothing to change.");
   const { data } = await supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("id", id).single();
   return applyCookies(NextResponse.json({ vendor: data }));
 }

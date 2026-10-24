@@ -141,10 +141,33 @@ export function bidOpenAlert(r: BidOpenRow): Alert {
   };
 }
 
+export interface BidMessageRow {
+  id: string;
+  bid_request_id: string;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+  vendor: { name: string | null; phone: string | null } | null;
+  request: { job_id: string | null; job: { title: string | null } | null } | null;
+}
+
+/** A vendor writing on their bid link's chat (migration 130). */
+export function bidMessageAlert(r: BidMessageRow): Alert {
+  const name = who(r.vendor?.name || r.author_name, r.vendor?.phone);
+  const job = (r.request?.job?.title ?? "").trim();
+  return {
+    id: `bm:${r.id}`, kind: "bid", at: r.created_at,
+    title: `${name} wrote on your bid request${job ? ` · ${job}` : ""}`,
+    body: clip(r.body, 140),
+    href: r.request?.job_id ? `/dashboard/scope/${r.request.job_id}/summary?bid=${r.bid_request_id}` : null,
+    contact_id: null,
+  };
+}
+
 /** Newest first, one per id. */
-export function mergeAlerts(a: Alert[], b: Alert[], max = 40, c: Alert[] = []): Alert[] {
+export function mergeAlerts(a: Alert[], b: Alert[], max = 40, c: Alert[] = [], d: Alert[] = []): Alert[] {
   const seen = new Set<string>();
-  return [...a, ...b, ...c]
+  return [...a, ...b, ...c, ...d]
     .sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0))
     .filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)))
     .slice(0, max);

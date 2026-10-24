@@ -29,6 +29,8 @@ import { useWide } from "@/lib/v34/use-wide";
 import { BidDocument, type DocScope } from "@/components/v34/bids/bid-document";
 import { AreaMap, areaVisuals, mapPicture, type AreaVisual } from "@/components/v34/proposal/area-visuals";
 import { sendBytes } from "@/components/v34/files-panel";
+import { WeekPicker } from "@/components/v34/bids/week-picker";
+import { cleanWeeks, weeksSummary } from "@/lib/bid-weeks";
 import type { PlansData } from "@/components/v34/plan-room/shared";
 
 export interface BidVendor {
@@ -43,7 +45,7 @@ interface Made { id: string; contact_id: string; name: string | null; phone: str
 /** A request already sent, opened to edit (migration 124): its job, ticks, packet and words. */
 export interface EditBid {
   id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[];
-  packet: { address?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; kind: string; name?: string }>; requirements?: string[] } | null;
+  packet: { address?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; kind: string; name?: string }>; requirements?: string[]; weeks?: unknown } | null;
   recipients: Array<{ contact_id: string; name: string; answered_at: string | null; revoked_at: string | null }>;
 }
 
@@ -132,6 +134,10 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const [pour, setPour] = useState(edit?.pour_date ?? "");
   const [note, setNote] = useState(edit?.note ?? "");
   const [reqs, setReqs] = useState<string[]>(edit?.packet?.requirements ?? []);
+  // The weeks Coy wants it done in (Coy, 2026-10-24: "tentative availability … narrowed down to the
+  // month and week of the month"); the vendor answers with theirs on the link (migration 130).
+  const [weeks, setWeeks] = useState<string[]>(cleanWeeks(edit?.packet?.weeks));
+  const [weeksOpen, setWeeksOpen] = useState(weeks.length > 0);
   // Editing: the vendors already on it keep their link; tell them it changed (a text each, this tap).
   const already = useMemo(() => (edit?.recipients ?? []).filter((r) => !r.revoked_at), [edit]);
   const [tellOld, setTellOld] = useState(true);
@@ -283,7 +289,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     try {
       const b = await call(edit ? `/api/bid-requests/${edit.id}` : "/api/bid-requests", edit ? "PATCH" : "POST", {
         job_id: jobId, pick: { scopes, lines, supplied }, maps: shown.filter((x) => visuals[x.key]?.map).map((x) => x.key), price_mode: mode, price_by: priceBy || null, pour_date: pour || null, note: note.trim() || null,
-        follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates, requirements: reqs },
+        follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates, requirements: reqs, weeks },
         recipients: picked.map((v) => ({ contact_id: v.id, channel: who[v.id] })),
       });
       const rows = b.recipients as Made[];
@@ -524,6 +530,19 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
                 <Check on={follow} onClick={() => setFollow(!follow)} label="Remind me to follow up" />
                 <span>Remind me {priceBy ? "on the price-by date" : "in 3 days"} if they haven&apos;t answered</span>
               </label>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <button type="button" onClick={() => setWeeksOpen(!weeksOpen)} aria-expanded={weeksOpen}
+                style={{ ...eyebrow, background: "none", border: "none", padding: 0, cursor: "pointer", color: T.ink }}>
+                {weeksOpen ? "▾" : "▸"} When you&apos;d like it done{weeks.length ? ` · ${weeksSummary(weeks)}` : " · any time"}
+              </button>
+              {weeksOpen && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 6 }}>Tick the weeks. They see them on their link and tick the weeks they could do it.</div>
+                  <WeekPicker value={weeks} onChange={setWeeks}
+                    pal={{ ink: T.ink, ink3: T.ink3, hair: T.hair, card: T.card, accent: T.hiviz, onAccent: T.onHiviz, mark: T.green }} />
+                </div>
+              )}
             </div>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} placeholder="A note for them (optional)" aria-label="Note for the vendors"
               style={{ ...field, height: "auto", width: "100%", padding: 8, marginTop: 8 }} />

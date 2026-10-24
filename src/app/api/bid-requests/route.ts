@@ -35,6 +35,17 @@ const REC_COLS = "id, bid_request_id, contact_id, channel, token, sent_at, sent_
 // Coy's won / lost mark (migration 126); read without it until 126 is applied.
 const OUTCOME_COLS = ", outcome, outcome_at";
 const noOutcome = (e: { message?: string } | null) => !!e && /outcome/.test(e.message ?? "");
+// The vendor's weeks (migration 130).
+const AVAIL_COLS = ", availability, availability_at, availability_note";
+const noAvail = (e: { message?: string } | null) => !!e && /availability/.test(e.message ?? "");
+/** Reads recipients with the newest columns first, dropping 130's then 126's while they aren't there. */
+type Read = { data: unknown; error: { message?: string; code?: string } | null };
+async function withCols(read: (cols: string) => PromiseLike<Read>): Promise<Read> {
+  let r = await read(REC_COLS + OUTCOME_COLS + AVAIL_COLS);
+  if (noAvail(r.error)) r = await read(REC_COLS + OUTCOME_COLS);
+  if (noOutcome(r.error)) r = await read(REC_COLS);
+  return r;
+}
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
@@ -49,8 +60,7 @@ export async function GET(req: NextRequest) {
   let recs: Array<Record<string, unknown>> = [];
   if (vendor) {
     const byVendor = (cols: string) => supabase.from("bid_request_recipients").select(cols).eq("org_id", orgId).eq("contact_id", vendor).order("created_at", { ascending: false }).limit(100);
-    let { data, error } = await byVendor(REC_COLS + OUTCOME_COLS);
-    if (noOutcome(error)) ({ data, error } = await byVendor(REC_COLS));
+    const { data, error } = await withCols(byVendor);
     if (missing091(error)) return json({ requests: [], missing: BIDS_MISSING });
     if (error) return json({ error: error.message }, 500);
     recs = (data ?? []) as unknown as Array<Record<string, unknown>>;
@@ -65,8 +75,7 @@ export async function GET(req: NextRequest) {
   const ids = ((rows ?? []) as Array<{ id: string }>).map((r) => r.id);
   if (!vendor && ids.length) {
     const byReq = (cols: string) => supabase.from("bid_request_recipients").select(cols).eq("org_id", orgId).in("bid_request_id", ids);
-    const first = await byReq(REC_COLS + OUTCOME_COLS);
-    const { data } = noOutcome(first.error) ? await byReq(REC_COLS) : first;
+    const { data } = await withCols(byReq);
     recs = (data ?? []) as unknown as Array<Record<string, unknown>>;
   }
   const cids = [...new Set(recs.map((r) => r.contact_id as string))];

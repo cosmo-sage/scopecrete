@@ -7,6 +7,7 @@ import { newToken } from "@/lib/proposal-links";
 import { publicOrigin } from "@/lib/hosts";
 import { orgRow } from "@/lib/org-server";
 import { FILES_BUCKET } from "@/lib/files";
+import { cleanWeeks } from "@/lib/bid-weeks";
 
 /**
  * Saves a bid request: a new one (POST /api/bid-requests) or a sent one edited
@@ -88,6 +89,7 @@ export async function saveBidRequest(req: NextRequest, session: ApiSession, edit
     files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, path: f.path, section: f.section ?? null })),
     maps: {} as Record<string, string>,
     requirements: cleanRequirements(pk.requirements),
+    weeks: cleanWeeks(pk.weeks),
     ...(was ? { edited_at: new Date().toISOString(), edits: (Number(was.packet?.edits) || 0) + 1 } : {}),
   };
   // Each shown section's takeoffs on its sheet, as a picture the browser draws and uploads next.

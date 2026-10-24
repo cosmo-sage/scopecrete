@@ -38,6 +38,8 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
   const [composing, setComposing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // A request sent from the budget or by Dusty (bid-request-host.tsx) shows here too.
+  useEffect(() => { const on = () => setTick((n) => n + 1); window.addEventListener("sc:bids-changed", on); return () => window.removeEventListener("sc:bids-changed", on); }, []);
   // ?bid=<request> (an alert that a vendor opened it) opens that request once the list has loaded.
   const [openId, setOpenId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("bid")));
   const openReq = reqs?.find((r) => r.id === openId) ?? null;

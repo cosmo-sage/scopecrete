@@ -93,7 +93,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12, bid_request: 12 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -441,6 +441,14 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         } catch (e) {
           out.push({ ok: false, text: `Appointment not changed: ${e instanceof Error ? e.message : String(e)}` });
         }
+        continue;
+      }
+      if (a.do === "bid_request") {
+        // Opens the composer (bid-request-host.tsx) with these ticked; Coy picks who and taps Send there.
+        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sc:bid-request", { detail: {
+          job: a.job, seed: { sections: a.areas, groups: a.groups, items: a.items }, vendors: a.vendors, from: "Started by Dusty" } }));
+        if (typeof window !== "undefined" && window.innerWidth < 1024) window.dispatchEvent(new Event("sc:dusty-close"));
+        out.push({ ok: true, text: "Opened the bid request — pick who gets it and tap Send" });
         continue;
       }
       if (a.do === "send_proposal") {

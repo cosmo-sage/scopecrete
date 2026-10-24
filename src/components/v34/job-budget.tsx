@@ -33,6 +33,7 @@ import { PriceBook, SwipeRetire } from "@/components/v34/price-book";
 import { DustyEmblemButton } from "@/components/v34/budget-tabs";
 import { sectionItemsQuestion } from "@/lib/dusty/section-items";
 import { vendorCompareQuestion } from "@/lib/dusty/vendor-compare";
+import { requestBids } from "@/components/v34/bids/bid-request-host";
 import { Emblem } from "@/components/site/marks";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COMMISSION_STEPS, commissionSplit } from "@/lib/commission";
@@ -302,6 +303,12 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
             {data.vendors.map((v) => <option key={v.id} value={v.id}>{v.name || formatPhone(v.phone ?? "") || "Vendor"}</option>)}
           </select>
         )}
+        {/* Bid requests from cost items (Coy, 2026-10-24): this group's lines, ticked alone in the composer. */}
+        {lines.length > 0 && (
+          <button type="button" onClick={() => requestBids({ job: jobId, seed: { lines: lines.map((l) => l.id) }, from: `Started from the budget · ${name}` })}
+            title={`Request bids for the ${name} items`} aria-label={`Request bids for the ${name} items`}
+            className="rounded px-1.5 shrink-0" style={{ fontSize: 10, fontWeight: 600, color: T.chalk, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", whiteSpace: "nowrap" }}>Bids</button>
+        )}
         {priced.length > 0 && (
           <button type="button" onClick={() => askGroupVendors(name, lines)} title="Ask Dusty to find vendors for this group" aria-label="Ask Dusty to find vendors for this group"
             className="flex items-center justify-center shrink-0" style={{ width: 22, height: 22, cursor: "pointer", background: "transparent" }}>
@@ -558,6 +565,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   );
 
       const linePanel = <LineSheet line={editingNow} data={data} sections={sections} res={editingNow ? res.lines[editingNow.id] : null}
+        onBids={editingNow ? () => requestBids({ job: jobId, seed: { lines: [editingNow.id] }, from: `Started from the budget · ${editingNow.name}` }) : undefined}
         onPickVendor={async (v) => {
           // A vendor who doesn't price this item yet: made (if typed new), given this line's price on the item, then pinned here.
           if (!editingNow?.cost_item_id) return "This line isn't a Price book item.";
@@ -1086,11 +1094,13 @@ function ItemPanel({ title, sub, onClose, children }: { title: string; sub: stri
   );
 }
 
-function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete, onPickVendor }: {
+function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete, onPickVendor, onBids }: {
   line: Line | null; data: Data; sections: Array<SectionInput & { id: string }>; res: ReturnType<typeof priceBudget>["lines"][string] | null;
   addon: boolean; onAddon: (on: boolean) => void;
   onClose: () => void; onPatch: (body: Record<string, unknown>) => void; onDelete: () => void;
   onPickVendor: (vendor: { id: string } | { name: string }) => Promise<string | null>;
+  /** Opens the bid request composer with this item alone ticked (Coy, 2026-10-24). */
+  onBids?: () => void;
 }) {
   if (!line || !res) return null;
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
@@ -1185,6 +1195,10 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
                 <VendorCompare line={line} sources={(data.sources ?? []).filter((x) => x.cost_item_id === line.cost_item_id)} onPin={(id) => onPatch({ source_id: id })} />
               </>
             : <div style={{ fontSize: F.xs, color: T.ink3 }}>A vendor goes on a Price book item; this line is on this budget only.</div>}
+          {onBids && (
+            <button type="button" onClick={onBids} className="mt-2 rounded px-3" style={{ height: 32, fontSize: F.sm, fontWeight: 600, border: `1px solid ${T.ink}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+              Request bids for this item ›</button>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">

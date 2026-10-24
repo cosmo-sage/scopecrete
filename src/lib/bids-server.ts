@@ -70,7 +70,7 @@ export async function composeFor(sb: Sb, orgId: string, jobId: string): Promise<
   const res = lines.length ? budget(lines, [], p?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null }, sections, p?.days ?? null,
     { tax_on: false, discount: 0, takeoff: takeoff as never }) : null;
   const qtyOf = (l: BudgetLine) => res?.lines[l.id]?.qty ?? (l.quantity !== null && l.quantity !== undefined ? Number(l.quantity) : null);
-  const toLine = (l: BudgetLine) => ({ id: l.id, name: l.name, unit: l.unit || null, qty: qtyOf(l), cost_type: (l.cost_type as string) ?? null });
+  const toLine = (l: BudgetLine) => ({ id: l.id, name: l.name, unit: l.unit || null, qty: qtyOf(l), cost_type: (l.cost_type as string) ?? null, item_id: ((l as unknown as { cost_item_id?: string | null }).cost_item_id ?? null) });
 
   const scopes: ComposeScope[] = sections.map((s) => ({
     key: s.id, title: s.name?.trim() || String(s.work_type ?? "Area").replace(/_/g, " "), size: sizeOf(s), measure: measureOf(s),

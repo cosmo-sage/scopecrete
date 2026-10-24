@@ -24,7 +24,7 @@ import { Drawer, OrgNameContext } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { call } from "@/components/v34/cost-cards";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { REQUIREMENTS, bidText, defaultPick, groupOf, laborVendor, pickFromShown, shownScopes, suppliedByDefault, type ComposeScope, type ShownScope } from "@/lib/bids";
+import { REQUIREMENTS, bidText, defaultPick, pickFromSeed, seedCount, seedEmpty, type BidSeed, groupOf, laborVendor, pickFromShown, shownScopes, suppliedByDefault, type ComposeScope, type ShownScope } from "@/lib/bids";
 import { useWide } from "@/lib/v34/use-wide";
 import { BidDocument, type DocScope } from "@/components/v34/bids/bid-document";
 import { AreaMap, areaVisuals, mapPicture, type AreaVisual } from "@/components/v34/proposal/area-visuals";
@@ -77,7 +77,7 @@ export const chip = (on: boolean, dis?: boolean): React.CSSProperties => ({
 });
 const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.sm, borderRadius: 3, padding: "0 8px" };
 
-export function BidComposer({ open, onClose, vendors: start, jobId: startJob, from, onDone, edit }: {
+export function BidComposer({ open, onClose, vendors: start, jobId: startJob, from, onDone, edit, seed, vendorIds }: {
   open: boolean; onClose: () => void;
   /** Vendors already picked (the Vendors page's selection). */
   vendors?: BidVendor[];
@@ -88,6 +88,10 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   onDone?: (msg: string) => void;
   /** A request already sent — the composer opens on it, and Save changes it in place, every link kept. */
   edit?: EditBid;
+  /** Started from the budget or by Dusty: only these cost items (lines, items, sections, groups) ticked to start. */
+  seed?: BidSeed | null;
+  /** Vendors to pick once every vendor has loaded (Dusty names them by id). */
+  vendorIds?: string[];
 }) {
   const org = useContext(OrgNameContext);
   const [jobs, setJobs] = useState<JobLite[] | null>(null);
@@ -99,6 +103,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const [scopeTicks, setScopeTicks] = useState<Record<string, boolean>>({});
   const [lineTicks, setLineTicks] = useState<Record<string, boolean>>({});
   const [laborPick, setLaborPick] = useState<boolean | null>(null);
+  // The cost items it was started from (the budget, Dusty) — until "Show everything".
+  const [seedOn, setSeedOn] = useState(() => !seedEmpty(seed) && !edit);
   const [visuals, setVisuals] = useState<Record<string, AreaVisual>>({});
   const [wideRef, wide] = useWide<HTMLDivElement>(1060);
   const [supplied, setSupplied] = useState<Record<string, boolean>>({});
@@ -146,8 +152,15 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     let off = false;
     call("/api/bid-requests/compose", "GET").then((b) => { if (!off) setJobs(b.jobs as JobLite[]); }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     // Every vendor, for + Add vendor and the suggestions.
-    call("/api/vendors", "GET").then((b) => { if (!off) setPool(b.vendors as BidVendor[]); }).catch(() => {});
+    call("/api/vendors", "GET").then((b) => {
+      if (off) return;
+      const all = b.vendors as BidVendor[];
+      setPool(all);
+      const want = new Set((vendorIds ?? []).map((x) => x.toLowerCase()));
+      if (want.size) setWho((w) => ({ ...Object.fromEntries(all.filter((v) => want.has(v.id.toLowerCase())).map((v) => [v.id, defaultCh(v)])), ...w }));
+    }).catch(() => {});
     return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
@@ -161,6 +174,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       setScopeTicks({}); setLineTicks({}); setSupplied({}); setVisuals({});
       setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, true])));
       setPhotoPick({}); setExtra([]); setOrgOpen(false);
+      // Another job than the one it was started from: its cost items aren't these.
+      if (startJob && j.id !== startJob) setSeedOn(false);
       const edit = editRef.current;
       if (edit && edit.job_id === j.id) {
         // Open on what was sent: its sections, lines, who supplies and its plans.
@@ -178,13 +193,15 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       call(`/api/jobs/${j.id}/plans`, "GET").then((d: PlansData) => { if (!off) setVisuals(areaVisuals(d, j.scopes.map((s) => s.key))); }).catch(() => {});
     }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, jobId]);
 
   const picked = useMemo(() => pool.filter((v) => who[v.id]), [pool, who]);
   // Labor subs only (Luis): every labor line to start, the materials left out.
   const laborAuto = picked.length > 0 && picked.every(laborVendor);
   const laborOnly = laborPick ?? laborAuto;
-  const startPick = useMemo(() => (job ? defaultPick(job.scopes, laborOnly) : { scopes: {}, lines: {} }), [job, laborOnly]);
+  const seedPick = useMemo(() => (job && seed && seedOn ? pickFromSeed(job.scopes, seed) : null), [job, seed, seedOn]);
+  const startPick = useMemo(() => seedPick ?? (job ? defaultPick(job.scopes, laborOnly) : { scopes: {}, lines: {} }), [seedPick, job, laborOnly]);
   const scopes = useMemo(() => ({ ...startPick.scopes, ...scopeTicks }), [startPick, scopeTicks]);
   const lines = useMemo(() => ({ ...startPick.lines, ...lineTicks }), [startPick, lineTicks]);
   const shown = useMemo(() => (job ? shownScopes(job.scopes, { scopes, lines, supplied, quantities: pk.quantities }) : []), [job, scopes, lines, supplied, pk.quantities]);
@@ -531,12 +548,19 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
               <span style={{ ...eyebrow }}>What they see</span>
               <span style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 160 }}>Tick sections and lines · your costs and the days on a line never show</span>
               {job && (
-                <button onClick={() => { setLaborPick(!laborOnly); setLineTicks({}); setScopeTicks({}); }} style={chip(laborOnly)} title={laborAuto ? "Picked for a labor sub" : undefined}>
-                  {laborOnly ? "✓ " : ""}Labor items only
+                <button onClick={() => { setLaborPick(seedPick ? true : !laborOnly); setSeedOn(false); setLineTicks({}); setScopeTicks({}); }} style={chip(laborOnly && !seedPick)} title={laborAuto ? "Picked for a labor sub" : undefined}>
+                  {laborOnly && !seedPick ? "✓ " : ""}Labor items only
                 </button>
               )}
             </div>
-            {laborOnly && laborAuto && laborPick === null && (
+            {seedPick && (
+              <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: F.xs, color: T.ink2, marginBottom: 6 }}>
+                <span>Started from {seedCount(seedPick) === 1 ? "1 cost item" : `${seedCount(seedPick)} cost items`} on the budget — only {seedCount(seedPick) === 1 ? "it is" : "they are"} ticked.</span>
+                {seedCount(seedPick) === 0 && <span style={{ color: T.red }}>None of them is on this job&apos;s budget now.</span>}
+                <button onClick={() => { setSeedOn(false); setLineTicks({}); setScopeTicks({}); }} style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline" }}>Show everything</button>
+              </div>
+            )}
+            {!seedPick && laborOnly && laborAuto && laborPick === null && (
               <div style={{ fontSize: F.xs, color: T.ink2, marginBottom: 6 }}>
                 {picked.length === 1 ? vname(picked[0]) : "They"} price{picked.length === 1 ? "s" : ""} labor, so every labor line is ticked and the materials are left out.
               </div>

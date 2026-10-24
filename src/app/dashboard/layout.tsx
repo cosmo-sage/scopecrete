@@ -63,6 +63,7 @@ import { SpacesNav, PageEdge, usePageSlide } from "@/components/v34/spaces/space
 import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
 import { TourHost } from "@/components/v34/tour";
 import { DustyNoteHost } from "@/components/v34/dusty-note";
+import { BidRequestHost } from "@/components/v34/bids/bid-request-host";
 import "@/styles/v34-shell.css";
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -496,7 +497,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[var(--sc-rail-w)]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
-        <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}><MeContext.Provider value={meCtx}>{children}</MeContext.Provider></OrgNameContext.Provider></AccessContext.Provider>
+        <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}><MeContext.Provider value={meCtx}>{children}{me && !limited && <BidRequestHost enabled={!viewingAs} />}</MeContext.Provider></OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />
       {me && <InstallPrompt />}

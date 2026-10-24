@@ -63,7 +63,7 @@ export const laborVendor = (v: { trades?: string[] | null; subtype?: string | nu
 // ---------------------------------------------------------------- scopes
 
 /** A scope as the composer reads it (Coy's side: the line's type comes along, never its cost). */
-export interface ComposeLine { id: string; name: string; unit: string | null; qty: number | null; cost_type: string | null }
+export interface ComposeLine { id: string; name: string; unit: string | null; qty: number | null; cost_type: string | null; item_id?: string | null }
 /**
  * A section's measurements, from its takeoffs or its typed size (the engine's quantities()):
  * the area in SF (SY is SF ÷ 9), a length in LF, or a count, and the thickness. `concrete` is a pour —
@@ -195,6 +195,36 @@ export function defaultPick(scopes: ComposeScope[], laborOnly: boolean): { scope
   }
   return { scopes: sc, lines: ln };
 }
+
+/**
+ * A bid request started from the budget (Coy, 2026-10-24: "request bid requests from cost items in the budget
+ * page. Or have dusty do it for me. or do it from the expanded Cost Item panel"): which lines go in. `lines` are
+ * budget line ids (a cost item's panel, a group's Request bids); `items` Price book item ids or refs (Dusty);
+ * `sections` section ids or 8-character refs; `groups` Labor · Materials · Equipment · Other. Named lines or items
+ * pick exactly those; otherwise every line of the sections and groups named. A section is on when a line of it is.
+ */
+export interface BidSeed { lines?: string[]; items?: string[]; sections?: string[]; groups?: BidGroup[] }
+const refHit = (id: string | null | undefined, refs: string[]) => !!id && refs.some((r) => r && id.toLowerCase().startsWith(r.toLowerCase()));
+export function seedEmpty(seed: BidSeed | null | undefined): boolean {
+  return !seed || !(seed.lines?.length || seed.items?.length || seed.sections?.length || seed.groups?.length);
+}
+export function pickFromSeed(scopes: ComposeScope[], seed: BidSeed): { scopes: Record<string, boolean>; lines: Record<string, boolean> } {
+  const sc: Record<string, boolean> = {}, ln: Record<string, boolean> = {};
+  const lineIds = new Set((seed.lines ?? []).map(String)), items = seed.items ?? [], secs = seed.sections ?? [], groups = seed.groups ?? [];
+  const exact = lineIds.size > 0 || items.length > 0;
+  for (const s of scopes) {
+    const secOk = !secs.length || refHit(s.key, secs);
+    let any = false;
+    for (const l of s.lines) {
+      const on = exact ? lineIds.has(l.id) || refHit(l.item_id, items) : secOk && (!groups.length || groups.includes(groupOf(l.cost_type)));
+      ln[l.id] = on; if (on) any = true;
+    }
+    sc[s.key] = any || (!exact && !groups.length && secs.length > 0 && secOk && !!s.measure);
+  }
+  return { scopes: sc, lines: ln };
+}
+/** How many lines a seed picked, for the composer's "Only the 3 items you picked" chip. */
+export const seedCount = (pick: { lines: Record<string, boolean> }) => Object.values(pick.lines).filter(Boolean).length;
 
 /** A material line is supplied by the org unless Coy says otherwise (the sub prices labor). */
 export const suppliedByDefault = (l: Pick<ComposeLine, "cost_type">) => l.cost_type === "material";

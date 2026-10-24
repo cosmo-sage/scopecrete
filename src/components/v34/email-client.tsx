@@ -225,7 +225,9 @@ interface ConvData {
   inboxes: string[]; ours: string[]; signature: string; can_send: boolean;
 }
 
-export function EmailConversation({ convKey, threadId, draftId }: { convKey: string; threadId?: string | null; draftId?: string | null }) {
+export function EmailConversation({ convKey, threadId, draftId, openMode }: { convKey: string; threadId?: string | null; draftId?: string | null;
+  /** Reply, Reply all or Forward tapped on the contact thread opens the composer that way, once. */
+  openMode?: string | null }) {
   const [d, setD] = useState<ConvData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -244,9 +246,10 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
       // A draft named in the address opens in the composer, once.
       const dr = draftId && opened.current !== draftId ? b.drafts.find((x) => x.id === draftId) : null;
       if (dr) { opened.current = dr.id; setCompose({ mode: dr.mode, draft: dr }); }
+      else if (!opened.current && (openMode === "reply" || openMode === "reply_all" || openMode === "forward")) { opened.current = openMode; setCompose({ mode: openMode }); }
     }).catch((e) => { if (!off) setErr(errText(e)); });
     return () => { off = true; };
-  }, [convKey, tick, draftId]);
+  }, [convKey, tick, draftId, openMode]);
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 4000); };
 
   const patch = async (b: Record<string, unknown>, msg?: string) => {

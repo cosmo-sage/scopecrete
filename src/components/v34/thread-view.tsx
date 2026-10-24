@@ -8,7 +8,9 @@ import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown } from "
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
-import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage } from "@/components/v34/conversation";
+import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage, type ThreadEmail } from "@/components/v34/conversation";
+import { ContactThreadHead, FilterBar, SearchPill, useReading, useSpacesNav } from "@/components/v34/contact-thread-head";
+import { scoped, readSize, readFont, readBg, type CtFilter } from "@/lib/v34/contact-thread";
 import { SamePerson, type Person } from "@/components/v34/person-view";
 import { ContactCard } from "@/components/v34/contact-card";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
@@ -64,8 +66,15 @@ export function ThreadView({ contactId, embedded = false }: {
   const threadKey = search.get("t") ?? threads?.thread ?? null;
   const tq = threadKey ? `?t=${encodeURIComponent(threadKey)}` : "";
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [emails, setEmails] = useState<Array<{ id: string; subject: string | null; from: string | null; at: string | null; body: string }>>([]);
+  const [emails, setEmails] = useState<ThreadEmail[]>([]);
   const [channelKey, setChannelKey] = useState<string | null>(search.get("channel"));
+  // Under Spaces (Claude Design "Contact Thread", 2026-10-23): one timeline of every channel, a Phone or
+  // Email filter, search scoped to it, Notes beside it and reading settings kept on the device.
+  const spaces = useSpacesNav() && !embedded;
+  const [reading] = useReading();
+  const [ctFilter, setCtFilter] = useState<CtFilter>(() => (search.get("channel") ?? "").startsWith("email") ? "email" : "all");
+  const [notesOpen, setNotesOpen] = useState(search.get("channel") === "notes");
+  const [q, setQ] = useState("");
   const [filter, setFilter] = useState<ChannelFilter>("all");
   // The fold button is gone (Coy, 2026-10-09: "can be removed completely"); on a phone the open
   // number's tab drops down All · Calls · Texts instead of a select in the toolbar.
@@ -309,6 +318,101 @@ export function ThreadView({ contactId, embedded = false }: {
     border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" };
   const seg = (on: boolean): React.CSSProperties => ({ height: "100%", padding: "0 10px", border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
     fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap" });
+
+  if (spaces) {
+    const phonesList = phoneTabs.filter((p) => p.value).map((p) => ({ value: p.value as string, label: p.label }));
+    const emailList = channels.filter((x) => x.kind === "email" && x.value).map((x) => x.value as string);
+    const newEmailHref = `/dashboard/messages/email/new?contact=${contactId}${emailList[0] ? `&to=${encodeURIComponent(emailList[0])}` : ""}`;
+    const view = scoped(ctFilter, q, { messages, emails, notes: person?.notes ?? [] });
+    const who = name ?? formatPhone(phone);
+    const textTo = phoneTabs.find((p) => p.key === channelKey)?.value ?? phone;
+    const action = ctFilter === "email"
+      ? <Link href={newEmailHref} style={{ ...pill, borderRadius: 999, background: T.chalk, color: "#fff", border: "none" }}><Envelope size={13} /> New email</Link>
+      : textTo ? <a href={`tel:${textTo}`} style={{ ...pill, borderRadius: 999, background: T.green, color: "#fff", border: "none" }}><Phone size={13} weight="fill" /> Call</a> : null;
+    const menuItem: React.CSSProperties = { padding: "8px 12px", textAlign: "left", fontSize: F.sm, color: T.ink, background: "transparent", border: "none", display: "block", width: "100%" };
+    return (
+      <div className="flex sc-pinned sc-pinned-full">
+        <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
+          <ContactThreadHead name={name} phone={phone} loading={loading} cardHref={cardHref}
+            org={crumbOrg && crumbOrg.label !== name ? { href: crumbOrg.href, label: crumbOrg.label, kind: crumbOrg.kind } : null}
+            phones={phonesList} emails={emailList} newEmailHref={newEmailHref}
+            filter={ctFilter} onFilter={(f) => { setCtFilter(f); setNotesOpen(false); }}
+            notesOpen={notesOpen} onNotes={() => setNotesOpen((v) => !v)} nNotes={nNotes}
+            searching={searching} onSearch={() => { setSearching((v) => !v); setQ(""); }}
+            menu={(close) => (<>
+              <Link href={cardHref} onClick={close} style={menuItem}>Contact details</Link>
+              <button onClick={() => { close(); setNotesOpen(true); }} style={menuItem}>All notes{nNotes ? ` (${nNotes})` : ""}</button>
+              <button onClick={() => { close(); askDustyBrief(); }} style={menuItem}>Where things stand</button>
+              {pageLink.label !== "Contact" && <Link href={pageLink.href} onClick={close} style={menuItem}>{pageLink.label} ›</Link>}
+              <button onClick={() => { close(); setFiling(true); }} style={menuItem}>Move thread</button>
+              {!openJob && <button onClick={() => { close(); void newScope(); }} disabled={starting || jobs === null} style={menuItem}>{starting ? "Starting…" : "New scope"}</button>}
+              <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>
+            </>)} />
+          {searching && <SearchPill filter={ctFilter} q={q} onQ={setQ} count={view.count} onDone={() => { setSearching(false); setQ(""); }} />}
+          {!notesOpen && (
+            <FilterBar filter={ctFilter} count={view.count}
+              sub={ctFilter === "email" ? (emailList.join(" · ") || "No email on file") : (phonesList.map((p) => formatPhone(p.value)).join(" · ") || "No number on file")}
+              action={action} onAll={() => setCtFilter("all")} />
+          )}
+          {liveAny && (
+            <div className="flex items-center gap-2 flex-shrink-0" role="status" style={{ padding: "7px 16px", background: T.greenDim, borderBottom: `1px solid ${T.hairSoft}` }}>
+              <LiveCallBadge call={liveAny} />
+              <span className="min-w-0" style={{ fontSize: 12, color: T.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {liveAny.direction === "outbound" ? "to" : "from"} {formatPhone(liveAny.phone)}{liveAny.line ? ` · via ${liveAny.line}` : ""}
+              </span>
+            </div>
+          )}
+          {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
+          {!loading && !error && notesOpen ? (
+            <div className="flex-1 min-h-0" style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css }}>
+              <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)}
+                merges={merges.map((m) => ({ id: m.id, label: `${m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread`, at: m.merged_at }))}
+                onUndoMerge={(id) => void undo(id)} undoing={undoing} />
+            </div>
+          ) : (
+            <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px", background: readBg(reading).css }}>
+              <div style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css, lineHeight: 1.5 }}>
+                {loading ? (
+                  <div className="space-y-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />)}</div>
+                ) : error ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <WarningCircle size={32} color={DA.error} />
+                    <p className="text-sm mt-2 font-semibold" style={{ color: DA.textPrimary }}>Couldn&apos;t load this thread</p>
+                    <p className="text-xs mt-1 break-words" style={{ color: DA.textMuted }}>{error}</p>
+                  </div>
+                ) : view.count === 0 && ctFilter !== "all" && !q ? (
+                  <div className="flex flex-col items-center gap-3 text-center py-16" style={{ fontSize: F.sm, color: T.ink3 }}>
+                    <span>{ctFilter === "email" ? `No emails with ${who} yet.` : `No calls or texts with ${who} yet.`}</span>{action}
+                  </div>
+                ) : view.count === 0 && q ? (
+                  <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing matches “{q}”.</div>
+                ) : (
+                  <Timeline messages={view.messages} emails={view.emails} notes={view.notes} phone={phone} />
+                )}
+              </div>
+            </div>
+          )}
+          {!loading && !error && !notesOpen && (
+            <Composer contactId={contactId} phone={textTo} name={name}
+              only={ctFilter === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} onSent={() => setReload((n) => n + 1)}
+              fromLine={orgLines.length > 1 ? { lines: orgLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
+          )}
+        </div>
+        {merging && (
+          <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
+            preselectId={merging ? merging.preselect : null}
+            onClose={() => setMerging(false)}
+            onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
+        )}
+        <FileAsSheet open={filing} onClose={() => setFiling(false)} contactId={contactId}
+          target={{ bucket: person?.contact.bucket ?? null, subtype: person?.contact.subtype ?? null,
+                    bucket_auto: person?.contact.bucket_state === "auto" ? { reason: null } : null,
+                    proposal: person?.contact.guess ? { classification: person.contact.guess } : null }}
+          subtypes={person?.subtypes}
+          onFiled={() => { setFiling(false); setReload((n) => n + 1); threads?.refresh(); }} />
+      </div>
+    );
+  }
 
   return (
     <div ref={embedded ? embedRef : undefined} className={embedded ? "flex" : "flex sc-pinned sc-pinned-full"}

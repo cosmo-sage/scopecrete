@@ -10,5 +10,5 @@ export default function EmailConversationPage() {
   const raw = (params?.key as string) ?? "";
   let key = raw;
   try { key = decodeURIComponent(raw); } catch { /* already plain */ }
-  return <EmailConversation key={key} convKey={key} threadId={sp.get("t")} draftId={sp.get("draft")} />;
+  return <EmailConversation key={key} convKey={key} threadId={sp.get("t")} draftId={sp.get("draft")} openMode={sp.get("mode")} />;
 }

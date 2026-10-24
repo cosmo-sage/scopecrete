@@ -6,7 +6,8 @@ import { plainNote } from "@/lib/mentions";
 import { PIN_MARK, pinLink, pinParts, readPin } from "@/lib/plan-pins";
 import { archiveNote } from "@/lib/archive";
 import { ArchiveNoteCard } from "@/components/v34/archive-actions";
-import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
+import { Phone, CaretDown, CaretRight, Envelope } from "@phosphor-icons/react";
+import { firstLine } from "@/lib/v34/contact-thread";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
 
@@ -698,26 +699,63 @@ function NoteRow({ n }: { n: Note }) {
   );
 }
 
-export function Timeline({ messages, phone, notes = [] }: { messages: ThreadMessage[]; phone: string | null; notes?: Note[] }) {
+/** An email in the contact thread (Claude Design "Contact Thread", 2026-10-23). */
+export interface ThreadEmail { id: string; subject: string | null; from: string | null; at: string | null; body: string; direction?: "in" | "out"; conversation?: string | null }
+
+/** One line — who, the first line, when — until it is tapped open; Reply opens the conversation. */
+function EmailRow({ e }: { e: ThreadEmail }) {
+  const [open, setOpen] = useState(false);
+  const out = e.direction === "out";
+  const when = e.at ? new Date(e.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+  const href = `/dashboard/messages/email/${encodeURIComponent(e.conversation || e.id)}`;
+  return (
+    <div className={`my-1.5 flex ${out ? "justify-end" : "justify-start"}`}>
+      <div className="rounded-xl" style={{ maxWidth: 640, width: "100%", background: T.card, border: `1px solid ${T.hair}` }}>
+        <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="w-full flex items-center gap-2 text-left" style={{ padding: "8px 12px", cursor: "pointer" }}>
+          <Envelope size={15} color={T.chalk} />
+          <span style={{ fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>{out ? "You" : e.from || "Email"}</span>
+          {!open && <span className="min-w-0 flex-1" style={{ color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{firstLine(e.body)}</span>}
+          {open && <span className="flex-1" />}
+          <span style={{ fontSize: "0.85em", color: T.ink3, whiteSpace: "nowrap" }}>{when}</span>
+        </button>
+        {open && (
+          <div style={{ padding: "0 12px 10px" }}>
+            {e.body && <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: T.ink }}>{e.body}</div>}
+            <div className="flex gap-3 mt-2" style={{ fontSize: "0.9em", fontWeight: 600 }}>
+              <a href={`${href}?mode=reply`} style={{ color: T.chalk }}>Reply</a>
+              <a href={`${href}?mode=reply_all`} style={{ color: T.chalk }}>Reply all</a>
+              <a href={`${href}?mode=forward`} style={{ color: T.chalk }}>Forward</a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Timeline({ messages, phone, notes = [], emails = [] }: { messages: ThreadMessage[]; phone: string | null; notes?: Note[]; emails?: ThreadEmail[] }) {
   const calls = messages.filter((m) => m.channel === "call").length;
   const silent = notes.length === 0 && messages.length > 0 && messages.every((m) =>
     m.channel === "call" && !m.summary?.trim() && m.artifact_kinds.filter((k) => k !== "recording").length === 0);
-  if (messages.length === 0 && notes.length === 0) {
+  if (messages.length === 0 && notes.length === 0 && emails.length === 0) {
     return <div className="text-center text-sm py-16" style={{ color: DA.textMuted }}>No messages in this thread.</div>;
   }
   // Messages arrive oldest first; notes are slotted in by when they were written.
-  const items: Array<{ at: string | null; m?: ThreadMessage; n?: Note }> = [
+  const items: Array<{ at: string | null; m?: ThreadMessage; n?: Note; e?: ThreadEmail }> = [
     ...messages.map((m) => ({ at: m.occurred_at, m })),
     ...notes.map((n) => ({ at: n.created_at, n })),
+    ...emails.map((e) => ({ at: e.at, e })),
   ];
-  if (notes.length) items.sort((a, b) => (a.at ? Date.parse(a.at) : 0) - (b.at ? Date.parse(b.at) : 0));
+  // Emails are grouped under their subject: a rule wherever it changes from the email before.
+  let lastSubject: string | null = null;
+  if (notes.length || emails.length) items.sort((a, b) => (a.at ? Date.parse(a.at) : 0) - (b.at ? Date.parse(b.at) : 0));
   return (
     <>
       {items.map((it, i) => {
         const day = dayLabel(it.at);
         const sep = i === 0 || day !== dayLabel(items[i - 1].at);
         return (
-          <React.Fragment key={it.m?.id ?? `note-${it.n!.id}`}>
+          <React.Fragment key={it.m?.id ?? (it.n ? `note-${it.n.id}` : `email-${it.e!.id}`)}>
             {sep && (
               <div className="flex items-center gap-2 my-2.5" aria-hidden="true">
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
@@ -725,7 +763,12 @@ export function Timeline({ messages, phone, notes = [] }: { messages: ThreadMess
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
               </div>
             )}
-            {it.n ? <NoteRow n={it.n} /> : <div id={`m-${it.m!.id}`}>{it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}</div>}
+            {it.e && (() => {
+              const subj = (it.e.subject || "(no subject)").replace(/^\s*((re|fwd?):\s*)+/i, "");
+              const show = subj !== lastSubject; lastSubject = subj;
+              return show ? <div className="flex items-center gap-2 mt-3 mb-1" style={{ fontSize: "0.85em", fontWeight: 600, color: T.chalk }}><Envelope size={13} />{subj}<span className="flex-1" style={{ height: 1, background: DA.border }} /></div> : null;
+            })()}
+            {it.e ? <div id={`e-${it.e.id}`}><EmailRow e={it.e} /></div> : it.n ? <NoteRow n={it.n} /> : <div id={`m-${it.m!.id}`}>{it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}</div>}
           </React.Fragment>
         );
       })}

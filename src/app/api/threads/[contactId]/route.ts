@@ -186,12 +186,13 @@ export async function GET(
   // Their channels (Threads v2): a tab per number, then email, then chat. Emails
   // are the mirrored inbox filed on this person (migration 061), newest 50.
   const [{ data: emailRows }, { data: addrRows }] = await Promise.all([
-    supabase.from("emails").select("id, subject, original_from_name, original_from_address, from_address, sent_at, created_at, text_body")
+    supabase.from("emails").select("id, subject, original_from_name, original_from_address, from_address, sent_at, created_at, text_body, direction, conversation")
       .eq("org_id", orgId).eq("contact_id", contactId).order("created_at", { ascending: false }).limit(50),
     supabase.from("contact_emails").select("email, label, is_primary").eq("org_id", orgId).eq("contact_id", contactId).order("is_primary", { ascending: false }),
   ]);
-  const emailList = ((emailRows ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; sent_at: string | null; created_at: string; text_body: string | null }>)
-    .map((e) => ({ id: e.id, subject: e.subject, from: e.original_from_name || e.original_from_address || e.from_address, at: e.sent_at ?? e.created_at, body: (e.text_body ?? "").slice(0, 1200) }));
+  const emailList = ((emailRows ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; sent_at: string | null; created_at: string; text_body: string | null; direction: string | null; conversation: string | null }>)
+    .map((e) => ({ id: e.id, subject: e.subject, from: e.original_from_name || e.original_from_address || e.from_address, at: e.sent_at ?? e.created_at, body: (e.text_body ?? "").slice(0, 1200),
+      direction: e.direction === "out" ? "out" : "in", conversation: e.conversation }));
   // The number on the contact row is theirs too, even before it is listed —
   // otherwise adding a second number made it look replaced (Coy, 2026-10-05).
   const listed = ((phoneRows ?? []) as Array<{ phone_e164: string; is_primary: boolean; label: string | null }>).map((p) => ({ phone: p.phone_e164, label: p.label, is_primary: p.is_primary }));

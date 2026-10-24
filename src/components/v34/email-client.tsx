@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, relTime, BUCKET } from "@/lib/v34/tokens";
-import { EmptyState, MenuButton, Sheet, SearchBubble } from "@/components/v34/primitives";
+import { EmptyState, MenuButton, SearchBubble } from "@/components/v34/primitives";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
@@ -675,22 +675,53 @@ export function AddressField({ label, list, onChange }: { label: string; list: s
   );
 }
 
+/** Folders of the attach panel, like the Files page's (src/components/v34/files-page.tsx), each a filter of /api/files/search. */
+type AttachFolder = { k: string; label: string; params: Record<string, string> };
+function attachFolders(jobId: string | null, contactId: string | null): AttachFolder[] {
+  return [
+    ...(jobId ? [{ k: "job", label: "This job", params: { job: jobId } }] : []),
+    ...(contactId ? [{ k: "person", label: "This person", params: { contact: contactId } }] : []),
+    { k: "recent", label: "Recent", params: { since: "30" } },
+    { k: "photos", label: "Photos", params: { kind: "image" } },
+    { k: "pdfs", label: "PDFs", params: { kind: "pdf" } },
+    { k: "plans", label: "Plans", params: { cat: "plan" } },
+    { k: "specs", label: "Specs", params: { cat: "spec" } },
+    { k: "quotes", label: "Vendor quotes", params: { cat: "vendor_quote" } },
+    { k: "all", label: "All files", params: {} },
+  ];
+}
+
+/** Attach from Files — a panel that rises from the composer (Coy, 2026-10-24: "slide up from the text box … more like the files page with folders"),
+ *  its folders down the left (chips across on a phone); the search waits behind its icon so a phone's keyboard doesn't open by itself. */
 function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open: boolean; onClose: () => void; jobId: string | null; contactId: string | null; picked: FileLite[]; onPick: (f: FileLite) => void }) {
+  const folders = attachFolders(jobId, contactId);
+  const [folder, setFolder] = useState(folders[0].k);
   const [q, setQ] = useState("");
+  const [searching, setSearching] = useState(false);
   const [files, setFiles] = useState<FileLite[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [up, setUp] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const phone = usePhone();
+  const cur = folders.find((f) => f.k === folder) ?? folders[0];
   useEffect(() => {
     if (!open) return;
     let off = false;
-    const params = new URLSearchParams();
-    if (q.trim()) params.set("q", q.trim()); else if (jobId) params.set("job", jobId); else if (contactId) params.set("contact", contactId);
+    const params = new URLSearchParams(cur.params);
+    if (q.trim()) params.set("q", q.trim());
     const t = setTimeout(() => {
+      setFiles(null);
       call<{ files: FileLite[] }>(`/api/files/search?${params}`).then((b) => { if (!off) { setFiles(b.files ?? []); setErr(null); } }).catch((e) => { if (!off) setErr(errText(e)); });
     }, q ? 250 : 0);
     return () => { off = true; clearTimeout(t); };
-  }, [open, q, jobId, contactId]);
+  }, [open, q, cur.k]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [open, onClose]);
+  if (!open) return null;
   const upload = async (list: FileList | null) => {
     const fs = Array.from(list ?? []);
     for (const f of fs) {
@@ -705,28 +736,64 @@ function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open
     setUp(null);
   };
   const has = new Set(picked.map((f) => f.id));
+  const icon = (f: FileLite) => (f.mime_type?.startsWith("image/") ? "🖼" : f.mime_type === "application/pdf" || /\.pdf$/i.test(f.name) ? "📄" : "📎");
+  const folderBtn = (f: AttachFolder) => {
+    const on = f.k === cur.k;
+    return (
+      <button key={f.k} onClick={() => setFolder(f.k)} aria-pressed={on}
+        style={phone
+          ? { flexShrink: 0, padding: "5px 10px", borderRadius: 14, fontSize: 12, border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? `color-mix(in srgb, ${T.hiviz} 12%, var(--sc-card))` : T.card, color: on ? T.ink : T.ink2, fontWeight: on ? 600 : 400, cursor: "pointer" }
+          : { textAlign: "left", padding: "6px 10px", borderRadius: 4, fontSize: F.sm, background: on ? `color-mix(in srgb, ${T.hiviz} 12%, var(--sc-card))` : "transparent", color: on ? T.ink : T.ink2, fontWeight: on ? 600 : 400, border: "none", cursor: "pointer", width: "100%" }}>
+        {f.k === "job" || f.k === "person" ? "📁 " : ""}{f.label}
+      </button>
+    );
+  };
   return (
-    <Sheet open={open} onClose={onClose} title="Attach from Files" sub={jobId ? "This job's files first — search for anything else." : "Search your Files."}>
-      <div className="px-4 py-3 flex flex-col gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files, a job, a person" style={field} aria-label="Search files" />
-        {err && <div style={{ color: T.red, fontSize: 12 }}>{err}</div>}
-        {!files ? <div style={{ color: T.ink3, fontSize: 12 }}>Loading…</div> : files.length === 0 ? <div style={{ color: T.ink3, fontSize: 12 }}>No files{q ? " match" : " here yet"}.</div> : (
-          <div className="flex flex-col">{files.slice(0, 60).map((f) => (
-            <button key={f.id} onClick={() => onPick(f)} disabled={has.has(f.id)} className="flex items-center gap-2 text-left" style={{ padding: "8px 4px", borderBottom: `1px solid ${T.hairSoft}`, cursor: has.has(f.id) ? "default" : "pointer", background: "none", opacity: has.has(f.id) ? 0.5 : 1 }}>
-              <span style={{ fontSize: F.sm, ...clip, flex: 1, minWidth: 0 }}>{f.name}</span>
-              <span style={{ fontSize: 11, color: T.ink3, ...nums }}>{f.byte_size ? `${Math.max(1, Math.round(f.byte_size / 1024))} KB` : ""}</span>
-              <span style={{ fontSize: 11, color: has.has(f.id) ? T.green : T.hiviz, fontWeight: 600 }}>{has.has(f.id) ? "✓" : "+"}</span>
-            </button>
-          ))}</div>
-        )}
-        <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
-          <input ref={input} type="file" multiple hidden onChange={(e) => void upload(e.target.files)} />
-          <button style={btn(false, !!(jobId || contactId))} disabled={!(jobId || contactId)} onClick={() => input.current?.click()}>Upload from this device</button>
-          {!(jobId || contactId) && <span style={{ fontSize: 11, color: T.ink3 }}>File the email on a job or person to upload new files.</span>}
-          {up && <span style={{ fontSize: 11.5, color: T.ink2 }}>{up}</span>}
+    <div role="dialog" aria-label="Attach from Files"
+      style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 8, background: T.card, boxShadow: "0 -6px 22px rgba(0,0,0,.14)", overflow: "hidden",
+               animation: "scToolUp 0.22s ease-out", display: "flex", flexDirection: "column", maxHeight: phone ? "58vh" : 420 }}>
+      <div className="flex items-center gap-2" style={{ padding: "8px 10px", borderBottom: `1px solid ${T.hairSoft}` }}>
+        <span style={{ ...eyebrow, color: T.ink }}>Attach from Files</span>
+        <span style={{ fontSize: 11, color: T.ink3 }}>{picked.length ? `${picked.length} picked` : ""}</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={() => { setSearching((v) => !v); setQ(""); }} aria-label={searching ? "Close search" : "Search files"} aria-pressed={searching}
+          style={{ width: 30, height: 30, borderRadius: 15, border: `1px solid ${T.hair}`, background: searching ? T.sunk : T.card, color: T.ink2, cursor: "pointer" }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5 14 14" strokeLinecap="round" /></svg>
+        </button>
+        <button onClick={onClose} aria-label="Close" style={{ fontSize: 20, lineHeight: 1, color: T.ink2, background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}>×</button>
+      </div>
+      {searching && (
+        <div style={{ padding: "8px 10px 0" }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${cur.label.toLowerCase()} — a name, a job, a person`} style={{ ...field, fontSize: 16 }} aria-label="Search files" />
+        </div>
+      )}
+      {phone && <div className="flex gap-1.5" style={{ overflowX: "auto", padding: "8px 10px 2px" }}>{folders.map(folderBtn)}</div>}
+      <div className="flex" style={{ minHeight: 0, flex: 1 }}>
+        {!phone && <div className="flex flex-col" style={{ width: 160, flexShrink: 0, padding: 6, borderRight: `1px solid ${T.hairSoft}`, overflowY: "auto" }}>{folders.map(folderBtn)}</div>}
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "4px 10px" }}>
+          {err && <div style={{ color: T.red, fontSize: 12, padding: "6px 0" }}>{err}</div>}
+          {!files ? <div style={{ color: T.ink3, fontSize: 12, padding: "8px 0" }}>Loading…</div>
+            : files.length === 0 ? <div style={{ color: T.ink3, fontSize: 12, padding: "8px 0" }}>No files{q ? " match" : " here yet"}.</div>
+            : files.slice(0, 80).map((f) => (
+              <button key={f.id} onClick={() => onPick(f)} disabled={has.has(f.id)} className="flex items-center gap-2 text-left w-full"
+                style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, cursor: has.has(f.id) ? "default" : "pointer", background: "none", opacity: has.has(f.id) ? 0.55 : 1 }}>
+                <span aria-hidden="true" style={{ width: 20, textAlign: "center" }}>{icon(f)}</span>
+                <span style={{ fontSize: F.sm, ...clip, flex: 1, minWidth: 0 }}>{f.name}</span>
+                <span style={{ fontSize: 11, color: T.ink3, ...nums }}>{f.byte_size ? `${Math.max(1, Math.round(f.byte_size / 1024))} KB` : ""}</span>
+                <span style={{ fontSize: 12, color: has.has(f.id) ? T.green : T.hiviz, fontWeight: 700, width: 14, textAlign: "center" }}>{has.has(f.id) ? "✓" : "+"}</span>
+              </button>
+            ))}
         </div>
       </div>
-    </Sheet>
+      <div className="flex items-center gap-2" style={{ padding: "8px 10px", borderTop: `1px solid ${T.hairSoft}` }}>
+        <input ref={input} type="file" multiple hidden onChange={(e) => void upload(e.target.files)} />
+        <button style={btn(false, !!(jobId || contactId))} disabled={!(jobId || contactId)} onClick={() => input.current?.click()}>↑ Upload from this device</button>
+        {!(jobId || contactId) && <span style={{ fontSize: 11, color: T.ink3 }}>File the email on a job or person to upload new files.</span>}
+        {up && <span style={{ fontSize: 11.5, color: T.ink2 }}>{up}</span>}
+        <span style={{ flex: 1 }} />
+        <button style={btn(true)} onClick={onClose}>Done</button>
+      </div>
+    </div>
   );
 }
 
@@ -833,8 +900,10 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
           ))}
         </div>
       )}
+      <AttachSheet open={attach} onClose={() => setAttach(false)} jobId={filing.job_id} contactId={filing.contact_id} picked={files}
+        onPick={(f) => setFiles((xs) => (xs.some((x) => x.id === f.id) || xs.length >= 10 ? xs : [...xs, f]))} />
       <div className="flex flex-wrap items-center gap-1.5" style={{ position: "relative" }}>
-        <button style={btn()} onClick={() => setAttach(true)} disabled={files.length >= 10}>📎 Attach</button>
+        <button style={btn()} onClick={() => setAttach((v) => !v)} disabled={files.length >= 10}>📎 Attach</button>
         <button style={btn()} onClick={() => setTpl((t) => !t)}>Templates ▾</button>
         {convKeyForDusty && <button style={btn(false, !!filing.filed && !busy)} disabled={!filing.filed || !!busy} title={filing.filed ? undefined : "File it on a customer first"} onClick={() => void dustyDraft()}>Dusty draft</button>}
         <span style={{ flex: 1 }} />
@@ -865,8 +934,6 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
           </div>
         </div>
       )}
-      <AttachSheet open={attach} onClose={() => setAttach(false)} jobId={filing.job_id} contactId={filing.contact_id} picked={files}
-        onPick={(f) => setFiles((xs) => (xs.some((x) => x.id === f.id) || xs.length >= 10 ? xs : [...xs, f]))} />
     </div>
   );
 
@@ -941,7 +1008,9 @@ export function NewEmail({ threadId, to, contactId, draftId, body, subject }: { 
     })().catch((e) => { if (!off) setErr(errText(e)); });
     return () => { off = true; };
   }, [draftId, to, contactId]);
-  const back = threadId ? `/dashboard/messages?t=${encodeURIComponent(threadId)}` : "/dashboard/messages";
+  // Written from a person's thread, closing it goes back to that thread (Coy, 2026-10-24: it landed on a blank Threads page).
+  const back = threadId ? `/dashboard/messages?t=${encodeURIComponent(threadId)}`
+    : contactId ? `/dashboard/messages/${encodeURIComponent(contactId)}` : "/dashboard/messages";
   return (
     <div style={{ padding: "12px 14px 90px", background: T.card, minHeight: "100%" }}>
       <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>

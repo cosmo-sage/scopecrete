@@ -345,6 +345,17 @@ export function ThreadView({ contactId, embedded = false }: {
               <button onClick={() => { close(); askDustyBrief(); }} style={menuItem}>Where things stand</button>
               {pageLink.label !== "Contact" && <Link href={pageLink.href} onClick={close} style={menuItem}>{pageLink.label} ›</Link>}
               <button onClick={() => { close(); setFiling(true); }} style={menuItem}>Move thread</button>
+              {orgLines.length > 1 && outLine && (
+                // Which of your lines a call or text goes from — in ⋯, not under the text box (Coy, 2026-10-24).
+                <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "6px 0" }}>
+                  <span style={{ ...eyebrow, fontSize: 11, color: T.ink3, padding: "0 12px" }}>Call or text from</span>
+                  {orgLines.map((l) => (
+                    <button key={l.id} onClick={() => { close(); setFromLine(l.id); }} style={{ ...menuItem, fontWeight: l.id === outLine.id ? 600 : 400 }}>
+                      {l.name}{l.id === outLine.id ? " ✓" : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
               {!openJob && <button onClick={() => { close(); void newScope(); }} disabled={starting || jobs === null} style={menuItem}>{starting ? "Starting…" : "New scope"}</button>}
               <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>
             </>)} />

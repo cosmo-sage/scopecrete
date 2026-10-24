@@ -486,16 +486,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
               <input ref={pick} type="file" multiple hidden onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
             </>
           )}
-          {/* Which of your lines it goes from, under the box (Threads v3, 2026-10-19: "From Office line ▾"). */}
-          {!compact && channel === "text" && fromLine && fromLine.lines.length > 1 && (
-            <label className="flex items-center gap-1 min-w-0" style={{ fontSize: 11.5, color: T.ink3 }}>
-              <span className="shrink-0">From</span>
-              <select value={fromLine.value ?? ""} onChange={(e) => fromLine.onPick(e.target.value)} aria-label="Send from which of your lines"
-                style={{ border: "none", background: "transparent", color: T.ink2, fontWeight: 600, fontSize: 11.5, maxWidth: 150, cursor: "pointer", padding: 0 }}>
-                {fromLine.lines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
-          )}
+          {/* No "From <line> ▾" under the box (Coy, 2026-10-24: "remove the 'from quo Batonrougeconcreters'
+              label in the footer of every thread"); the line is picked in the thread's ⋯. */}
           <span className="flex-1" />
 
           {!compact && (

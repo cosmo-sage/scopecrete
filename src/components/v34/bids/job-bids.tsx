@@ -18,6 +18,8 @@ import { Drawer } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { BidComposer, chip, type EditBid } from "@/components/v34/bids/bid-composer";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
+import { VendorTalk } from "@/components/v34/bids/vendor-talk";
+import { cleanWeeks } from "@/lib/bid-weeks";
 import { applyBidToBudget } from "@/lib/v34/bid-to-budget";
 import { bidCovers, bidLineName } from "@/lib/bid-ref";
 import { GROUP_LABEL, answeredBeforeEdit, budgetUnitCost, compareBids, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
@@ -28,6 +30,8 @@ interface Rec {
   sent_via?: string[] | null; last_viewed_at?: string | null;
   /** Coy's won / lost mark (migration 126), shown on the vendor's portal. */
   outcome?: "awarded" | "not_chosen" | null; outcome_at?: string | null;
+  /** The weeks they could do it (migration 130). */
+  availability?: unknown; availability_at?: string | null; availability_note?: string | null;
 }
 interface Req { id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[]; created_at: string; edited_at: string | null; packet: EditBid["packet"]; recipients: Rec[] }
 
@@ -177,6 +181,7 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
               {answeredBeforeEdit(x.answered_at, req.edited_at) && line("Answered before your last edit — their price is for the earlier version.", T.sun)}
               {x.answered_at && line(`Answered ${when(x.answered_at)}${x.sent_at ? ` (in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)})` : ""}${x.answer_note ? ` — “${x.answer_note}”` : ""}`, T.green)}
               {x.outcome && line(x.outcome === "awarded" ? `✓ Awarded to them ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows they won it.` : `Marked not chosen ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows it went another way.`, x.outcome === "awarded" ? T.green : T.ink3)}
+              <VendorTalk rec={x} wanted={cleanWeeks((req.packet as { weeks?: unknown } | null)?.weeks)} name={x.name} />
               {x.answered_at && !x.revoked_at && !x.price_lines?.length && total !== null && total > 0 && <UseBid jobId={jobId} req={req} rec={x} total={total} onDone={onChanged} />}
               {r && "error" in r && line(r.error, T.red)}
               {live[x.id] && line(live[x.id], live[x.id].startsWith("Delivered") ? T.green : live[x.id].startsWith("Text failed") || live[x.id].startsWith("Quo took") ? T.red : T.ink)}

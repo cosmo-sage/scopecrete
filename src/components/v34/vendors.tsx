@@ -14,6 +14,8 @@
  * the threads they're in, the conversation and their files.
  */
 
+import { VendorTalk } from "@/components/v34/bids/vendor-talk";
+import { cleanWeeks, weeksSummary } from "@/lib/bid-weeks";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -608,8 +610,10 @@ export function VendorPage({ id }: { id: string }) {
 interface BidRec {
   id: string; contact_id: string; name: string; url: string; channel: string; sent_at: string | null; sent_via: string[] | null; opened_at: string | null; view_count: number;
   answered_at: string | null; price_total: number | null; price_lines: PriceLine[] | null; answer_note: string | null; revoked_at: string | null; created_at: string;
+  /** The weeks they could do it (migration 130). */
+  availability?: unknown; availability_at?: string | null; availability_note?: string | null;
 }
-interface BidReq { id: string; job_id: string; job_title: string | null; price_mode: string; price_by: string | null; scopes: ShownScope[]; created_at: string; recipients: BidRec[] }
+interface BidReq { id: string; job_id: string; job_title: string | null; price_mode: string; price_by: string | null; scopes: ShownScope[]; created_at: string; recipients: BidRec[]; packet?: { weeks?: unknown } | null }
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -652,6 +656,8 @@ function VendorBids({ rows, stats, jobs, missing, onSend }: { rows: Array<BidRec
                   <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{r.req.scopes.map((s) => `${s.title}${s.size ? ` · ${s.size}` : ""}`).join(" · ")}</div>
                   <div style={{ fontSize: F.xs, color: r.answered_at ? T.green : r.revoked_at ? T.ink3 : T.hivizText }}>{st}</div>
                   {r.answer_note && <div style={{ fontSize: F.xs, color: T.ink2 }}>“{r.answer_note}”</div>}
+                  {r.req.packet && cleanWeeks(r.req.packet.weeks).length > 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>You asked for {weeksSummary(cleanWeeks(r.req.packet.weeks))}</div>}
+                  <div className="mt-1"><VendorTalk rec={r} wanted={cleanWeeks(r.req.packet?.weeks)} name={r.name} /></div>
                 </div>
                 <span style={{ ...nums, fontSize: F.sm, fontWeight: 600, color: r.price_total !== null ? T.ink : T.ink3 }}>{r.price_total !== null ? money(Number(r.price_total)) : r.price_lines ? "per line" : "—"}</span>
                 <a href={r.url} target="_blank" rel="noreferrer" style={{ ...eyebrow, color: T.chalk }}>Link</a>

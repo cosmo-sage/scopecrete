@@ -12,6 +12,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { answerTotal, answeredBeforeEdit, type ShownScope } from "@/lib/bids";
 import { Emblem, Wordmark } from "@/components/site/marks";
 import { BidDocument, lineQty, type DocScope } from "./bid-document";
+import { WeekPicker } from "./week-picker";
+import { BidChat } from "./bid-chat";
+import { weeksSummary } from "@/lib/bid-weeks";
 
 interface Bid {
   gone?: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
@@ -20,6 +23,8 @@ interface Bid {
   files?: Array<{ id: string; name: string; kind: string; url: string; section?: string | null }>; maps?: Record<string, string>; rates?: Record<string, number>;
   answer?: { at: string; total: number | null; lines: Array<{ key: string; price: number }> | null; note: string | null } | null;
   edited_at?: string | null;
+  /** The weeks the org would like the work done in (migration 130 reads the vendor's own). */
+  weeks?: string[];
   /** Only for someone in the org: how often this vendor has opened their link. */
   opens?: { name: string | null; view_count: number; opened_at: string | null; last_viewed_at: string | null; answered_at: string | null; revoked_at: string | null } | null;
 }
@@ -182,6 +187,7 @@ export function SharedBid({ token }: { token: string }) {
                 opacity: busy || b.own || (perItem ? sum === null : num(total) === null) ? 0.5 : 1 }}>{busy ? "Sending…" : "Send my price"}</button>
           </div>
         )}
+        <Availability token={token} b={b} card={card} h={h} input={input} />
         <a href="https://scopecrete.ai" target="_blank" rel="noopener"
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 0 4px", textDecoration: "none", color: C.ink3 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
@@ -224,5 +230,66 @@ function OpenedBanner({ o, card }: { o: NonNullable<Bid["opens"]>; card: React.C
         {o.revoked_at ? "Their link is off." : o.answered_at ? `Priced ${at(o.answered_at)}.` : "No price yet."} Only you see this.
       </div>
     </div>
+  );
+}
+
+/** "When could you do it?" — the weeks they could take it, by week of the month — and the messages
+ * with the org on this link (migration 130). Neither shows before 130. */
+function Availability({ token, b, card, h, input }: { token: string; b: Bid; card: React.CSSProperties; h: React.CSSProperties; input: React.CSSProperties }) {
+  const [state, setState] = useState<"loading" | "missing" | "ready">("loading");
+  const [weeks, setWeeks] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/b/${encodeURIComponent(token)}/chat`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (off) return;
+      if (j?.missing || j?.error) { setState("missing"); return; }
+      setWeeks(Array.isArray(j.availability) ? j.availability : []); setNote(j.availability_note ?? ""); setSavedAt(j.availability_at ?? null); setState("ready");
+    }).catch(() => { if (!off) setState("missing"); });
+    return () => { off = true; };
+  }, [token]);
+  if (state !== "ready") return null;
+  const wanted = b.weeks ?? [];
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/b/${encodeURIComponent(token)}/chat`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weeks, note }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`);
+      setSavedAt(j.at ?? new Date().toISOString()); setDirty(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  return (
+    <>
+    <section style={card}>
+      <h2 style={h}>When could you do it?</h2>
+      <div style={{ fontSize: 14, color: C.ink2, marginBottom: 10, lineHeight: 1.45 }}>
+        {wanted.length ? <>{b.org_name ?? "They"} would like it done <b style={{ color: C.ink }}>{weeksSummary(wanted)}</b> (marked with a dot). </> : null}
+        Tap the weeks you could take it — a rough guess is fine.
+      </div>
+      <WeekPicker value={weeks} wanted={wanted} readOnly={b.own} onChange={(v) => { setWeeks(v); setDirty(true); }}
+        pal={{ ink: C.ink, ink3: C.ink3, hair: C.hair, card: "#fff", accent: C.green, onAccent: "#fff", mark: C.accent }} />
+      <label style={{ display: "block", marginTop: 10 }}>
+        <span style={{ fontSize: 13, color: C.ink2 }}>Anything about timing (optional)</span>
+        <input value={note} maxLength={500} disabled={b.own} onChange={(e) => { setNote(e.target.value); setDirty(true); }} aria-label="Timing note" style={{ ...input, marginTop: 4 }} />
+      </label>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+        {!b.own && <button type="button" onClick={() => void save()} disabled={busy || !dirty}
+          style={{ height: 40, padding: "0 18px", borderRadius: 4, border: "none", background: C.green, color: "#fff", fontWeight: 600, fontSize: 15, cursor: "pointer", opacity: busy || !dirty ? 0.5 : 1 }}>{busy ? "Saving…" : "Save my weeks"}</button>}
+        {savedAt && !dirty && <span style={{ fontSize: 13, color: C.green }}>Saved {at(savedAt)}{weeks.length ? ` — ${weeksSummary(weeks)}` : ""}</span>}
+        {err && <span style={{ fontSize: 13, color: C.red }}>{err}</span>}
+      </div>
+    </section>
+    <section style={card}>
+          <h2 style={h}>Messages with {b.org_name ?? "them"}</h2>
+          <div style={{ fontSize: 13, color: C.ink2, marginBottom: 8 }}>Ask about the job or when it can happen. {b.org_name ?? "They"} answer here — check back on this link.</div>
+          <BidChat url={`/api/b/${encodeURIComponent(token)}/chat`} mine="vendor" empty="No messages yet." disabled={b.own ? "Write to them from the job's bid request — this is their side." : null}
+            pal={{ ink: C.ink, ink2: C.ink2, ink3: C.ink3, hair: C.hair, card: "#fff", mine: "#E3ECE6", theirs: "#F1ECE2", accent: C.accent, onAccent: "#fff", red: C.red }} />
+        </section>
+    </>
   );
 }

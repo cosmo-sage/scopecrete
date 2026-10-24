@@ -91,7 +91,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const inSettings = settingsSectionOf(pathname ?? "") !== null;
   const lastPage = React.useRef<string>("/dashboard");
   useEffect(() => {
-    if (!inSettings && pathname) lastPage.current = `${pathname}${window.location.search}`;
+    if (!inSettings && pathname) {
+      lastPage.current = `${pathname}${window.location.search}`;
+      // Settings' own × reads it too (Coy, 2026-10-24: "a way to close the settings page on the settings page").
+      try { sessionStorage.setItem("sc:before-settings", lastPage.current); } catch { /* private mode */ }
+    }
   }, [inSettings, pathname]);
   // The colour theme follows the account (Settings → Appearance).
   const [theme] = useTheme();

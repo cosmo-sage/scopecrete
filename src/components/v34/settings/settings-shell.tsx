@@ -14,7 +14,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp } from "@/lib/v34/tokens";
 import { PageHeader } from "@/components/v34/primitives";
 import { useAccess } from "@/lib/v34/access-ctx";
@@ -27,10 +27,20 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
   const sections = settingsSections(access.limited);
   const at = settingsSectionOf(pathname) ?? "";
   const home = at === "";
+  const router = useRouter();
+  // × closes Settings: back to the page it was opened from, else the Dashboard (Coy, 2026-10-24).
+  const close = () => {
+    let to = "/dashboard";
+    try { to = sessionStorage.getItem("sc:before-settings") || to; } catch { /* private mode */ }
+    router.push(to);
+  };
 
   return (
     <div style={{ color: T.ink }}>
-      <PageHeader title="Settings" sub="Your account, your organization, lines, appearance, Dusty and the menus." />
+      <PageHeader title="Settings" sub="Your account, your organization, lines, appearance, Dusty and the menus."
+        actions={<button type="button" onClick={close} aria-label="Close Settings" title="Close Settings"
+          className="flex items-center justify-center rounded-full"
+          style={{ width: 32, height: 32, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>} />
       <CompanyCard />
       <div className="flex gap-5 items-start mx-auto px-3 lg:px-4 pb-8" style={{ maxWidth: 1180 }}>
         <nav aria-label="Settings" className={`${home ? "flex" : "hidden lg:flex"} flex-col w-full lg:w-[240px] shrink-0 lg:sticky sc-set-nav`}

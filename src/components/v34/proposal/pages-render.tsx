@@ -20,9 +20,13 @@ const usd0 = (n: number) => n.toLocaleString("en-US", { style: "currency", curre
 
 // ── At a glance
 
-export function GlancePage({ title, total, draws, areas, start, display, setD }: {
+/** Wraps a section of a page that can be switched off on its own (see PARTS in proposal-pages). */
+type PartFn = (key: string, node: React.ReactNode) => React.ReactNode;
+const asIs: PartFn = (_k, node) => node;
+
+export function GlancePage({ title, total, draws, areas, start, display, setD, part = asIs }: {
   title: string; total: number | null; draws: Draw[]; areas: string[]; start: string | null;
-  display: ProposalDisplay; setD: ((p: Partial<ProposalDisplay>) => void) | null;
+  display: ProposalDisplay; setD: ((p: Partial<ProposalDisplay>) => void) | null; part?: PartFn;
 }) {
   const pay = paymentLine(draws.map((d) => ({ when: d.when, pct: d.pct ?? null, amount: total && total > 0 ? drawAmount(d, total) : d.amt ?? null })));
   const valid = validLabel(display.valid_until);
@@ -35,18 +39,18 @@ export function GlancePage({ title, total, draws, areas, start, display, setD }:
   return (
     <>
       <div style={kicker}>{title}</div>
-      <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 48, lineHeight: 1.1, margin: "6px 0 12px", ...nums }}>{total !== null ? usd0(total) : "—"}</div>
+      {part("price", <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 48, lineHeight: 1.1, margin: "6px 0 12px", ...nums }}>{total !== null ? usd0(total) : "—"}</div>)}
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-        {cell("Payment", pay)}
-        {cell("Valid until", setD
+        {part("payment", cell("Payment", pay))}
+        {part("valid", cell("Valid until", setD
           ? <>
               <input type="date" aria-label="Valid until" value={display.valid_until ?? ""} onChange={(e) => setD({ valid_until: e.target.value || undefined })}
                 className="sc-no-print" style={{ border: "1px solid #E6DCC8", borderRadius: 3, padding: "1px 6px", font: "inherit" }} />
               <span className="sc-print-only">{valid ?? "—"}</span>
             </>
-          : valid ?? "Ask us")}
-        {cell("Included", areas.length ? areas.join(" · ") : "See the scope of work")}
-        {cell("Start", start ?? "To be scheduled")}
+          : valid ?? "Ask us"))}
+        {part("included", cell("Included", areas.length ? areas.join(" · ") : "See the scope of work"))}
+        {part("start", cell("Start", start ?? "To be scheduled"))}
       </div>
     </>
   );
@@ -54,12 +58,12 @@ export function GlancePage({ title, total, draws, areas, start, display, setD }:
 
 // ── If we find…
 
-export function IfFindPage({ title, lines, setD, onAdd }: { title: string; lines: IfFindLine[]; setD: ((p: Partial<ProposalDisplay>) => void) | null; onAdd?: () => void }) {
+export function IfFindPage({ title, lines, setD, onAdd, part = asIs }: { title: string; lines: IfFindLine[]; setD: ((p: Partial<ProposalDisplay>) => void) | null; onAdd?: () => void; part?: PartFn }) {
   const set = (id: string, patch: Partial<IfFindLine>) => setD?.({ ifind: lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
   return (
     <>
       <div style={kicker}>{title}</div>
-      <p style={{ fontSize: 12.5, margin: "4px 0 10px", color: "#5E5A52" }}>Some things can&apos;t be seen until the work starts. If we find any of these, this is what they cost. They are not in the total.</p>
+      {part("intro", <p style={{ fontSize: 12.5, margin: "4px 0 10px", color: "#5E5A52" }}>Some things can&apos;t be seen until the work starts. If we find any of these, this is what they cost. They are not in the total.</p>)}
       <div style={{ display: "grid", gap: 6 }}>
         {lines.map((l) => (
           <div key={l.id} className="flex items-baseline gap-2 flex-wrap" style={{ borderBottom: "1px solid #F1E9DA", paddingBottom: 6, fontSize: 13 }}>

@@ -30,6 +30,40 @@ export interface ProposalPage {
   /** A PDF page's file (a job file id) and the page numbers left out. */
   file?: string;
   skip?: number[];
+  /** Sections of this page switched off (keys from PARTS); an empty list still overrides the old switches. */
+  parts_off?: string[];
+}
+
+/** The sections inside each kind of page that can be switched off on their own (Coy, 2026-10-24:
+ *  "toggle on/off sections in the pages"). */
+export const PARTS: Partial<Record<PageKind, Array<{ key: string; label: string }>>> = {
+  title: [{ key: "cover", label: "Cover" }, { key: "band", label: "Dark band" }, { key: "header", label: "Number & names" }],
+  glance: [{ key: "price", label: "Price" }, { key: "payment", label: "Payment" }, { key: "valid", label: "Valid until" }, { key: "included", label: "Included" }, { key: "start", label: "Start" }],
+  scope: [{ key: "info", label: "Job site line" }, { key: "intro", label: "Introduction" }, { key: "areas", label: "Areas & scope of work" }, { key: "visuals", label: "Maps & photos" }],
+  pricing: [{ key: "note", label: "Preliminary note" }, { key: "photos", label: "Section photos" }],
+  ifind: [{ key: "intro", label: "Explanation" }],
+  warranty: [{ key: "title", label: "Title" }],
+  terms: [{ key: "title", label: "Title" }],
+  sign: [{ key: "words", label: "Acceptance words" }, { key: "contractor", label: "Your signature line" }],
+  text: [{ key: "heading", label: "Heading" }],
+};
+
+/** The sections switched off on a page. Before a page had its own list, the title page's cover and
+ *  header followed the proposal's old switches (display.off). */
+export function partsOff(p: ProposalPage, legacy?: Record<string, boolean>): string[] {
+  if (p.parts_off) return p.parts_off;
+  return p.kind === "title" && legacy ? ["cover", "header"].filter((k) => legacy[k]) : [];
+}
+export const partOff = (p: ProposalPage, key: string, legacy?: Record<string, boolean>) => partsOff(p, legacy).includes(key);
+
+/** Switch one section of a page on or off. */
+export function togglePart(pages: ProposalPage[], id: string, key: string, on: boolean, legacy?: Record<string, boolean>): ProposalPage[] {
+  return pages.map((p) => {
+    if (p.id !== id) return p;
+    const next = partsOff(p, legacy).filter((k) => k !== key);
+    if (!on) next.push(key);
+    return { ...p, parts_off: next };
+  });
 }
 
 /** A pre-priced unknown on "If we find…": shown with its unit price, never in the total. */
@@ -110,6 +144,10 @@ export function cleanPages(x: unknown): ProposalPage[] | undefined {
     const p: ProposalPage = { id, kind, label: str(o.label, 80).replace(/[\r\n\t]+/g, " ") };
     if (o.off === true) p.off = true;
     if (o.isNew === true) p.isNew = true;
+    if (Array.isArray(o.parts_off)) {
+      const known = new Set((PARTS[kind] ?? []).map((x) => x.key));
+      p.parts_off = [...new Set(o.parts_off.filter((k): k is string => typeof k === "string" && known.has(k)))];
+    }
     if (kind === "text") p.body = str(o.body, 12000);
     if (kind === "photos") {
       p.photos = (Array.isArray(o.photos) ? o.photos : []).slice(0, 48).flatMap((f) => {

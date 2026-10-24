@@ -10,8 +10,9 @@
  *     the exact number; the extra is profit;
  *   - spreads that rounded price over the lines in proportion to their own
  *     prices, so the visible items add up to the total exactly, to the cent;
- *   - applies what Coy hides: a hidden line or group drops out of the total, a
- *     hidden price shows "—" but still counts, an add-on is listed apart;
+ *   - applies what Coy hides: a hidden group drops out of the total, a hidden line's
+ *     words are left off but its price stays in its group and the total (Coy,
+ *     2026-10-24), a hidden price shows "—" but still counts, an add-on is listed apart;
  *   - shows the pass-through tax as its own line, or folds it into the groups
  *     (the customer's total is the same either way);
  *   - checks the draw schedule against the total.
@@ -26,7 +27,7 @@ export interface ProposalDisplay {
   off?: Record<string, boolean>;
   /** Pricing groups (an area's id, or "job") left out of the proposal and its total. */
   groupsOff?: Record<string, boolean>;
-  /** Lines left out of the proposal and its total. */
+  /** Lines whose row is left off the proposal; their price stays in the group and the total (Coy, 2026-10-24). */
   linesOff?: Record<string, boolean>;
   /** Group or line keys whose price shows "—" (still counted in the total). */
   pricesOff?: Record<string, boolean>;
@@ -194,20 +195,20 @@ export function priceProposal(
       qty: r(l).qty, unit: l.unit, sell: sell.get(l.id) ?? 0,
       hidden: d.linesOff?.[l.id] === true, price_hidden: d.pricesOff?.[l.id] === true, addon: addons.has(l.id),
     }));
-    const gsell = items.filter((i) => !i.hidden && !i.addon).reduce((a, i) => a + i.sell, 0);
+    const gsell = items.filter((i) => !i.addon).reduce((a, i) => a + i.sell, 0);
     groups.push({ key, name: area ? area.name || "An area" : "Whole job", sqft: area?.sqft ?? null, sell: cents(gsell), hidden: gHidden, price_hidden: d.pricesOff?.[key] === true, items });
   }
 
-  // Tax: the pass-through on the lines still in the proposal.
+  // Tax: the pass-through on every line in the price (a hidden row's too).
   const live = (g: ProposalGroup) => !g.hidden;
-  const taxOf = (g: ProposalGroup) => g.items.filter((i) => !i.hidden && !i.addon).reduce((a, i) => a + (res.lines[i.id]?.tax ?? 0), 0);
+  const taxOf = (g: ProposalGroup) => g.items.filter((i) => !i.addon).reduce((a, i) => a + (res.lines[i.id]?.tax ?? 0), 0);
   const tax = cents(groups.filter(live).reduce((a, g) => a + taxOf(g), 0));
   const tax_shown = d.show_tax_line === true;
   if (!tax_shown && tax > 0) {
     // Folded in: each taxed line carries its own tax, so the lines still add up to their group and nothing moves between groups.
     for (const g of groups) {
       if (!live(g)) continue;
-      for (const i of g.items) if (!i.hidden && !i.addon) i.sell = cents(i.sell + (res.lines[i.id]?.tax ?? 0));
+      for (const i of g.items) if (!i.addon) i.sell = cents(i.sell + (res.lines[i.id]?.tax ?? 0));
       g.sell = cents(g.sell + taxOf(g));
     }
   }

@@ -17,7 +17,7 @@ import { ScopeBullets } from "../scope-of-work";
 import { DustyEmblem } from "../dusty-avatar";
 import { CoverPage, CoverControls } from "./cover-page";
 import { GlancePage, IfFindPage, TextBody, TextEditor, PhotosPage, PdfPage, type DocFile } from "./pages-render";
-import { pagesOf, patchPage, validLabel, BUILT, type ProposalPage } from "@/lib/proposal-pages";
+import { pagesOf, patchPage, partOff, togglePart, validLabel, BUILT, PARTS, type ProposalPage } from "@/lib/proposal-pages";
 import { coverOf, proposalFileName, drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
@@ -146,6 +146,19 @@ function Section({ k, label, off, onToggle, children, page, narrow }: { k: strin
   );
 }
 
+/** A section inside a page (Coy, 2026-10-24: "toggle on/off sections in the pages"). Off, the customer
+ *  never sees it; while editing it folds to a dashed line that brings it back. */
+function Part({ off, label, onShow, children }: { off: boolean; label: string; onShow?: () => void; children: React.ReactNode }) {
+  if (!off) return <>{children}</>;
+  if (!onShow) return null;
+  return (
+    <button type="button" onClick={onShow} className="sc-no-print w-full text-left"
+      style={{ minHeight: 28, border: "1px dashed #C9BDA6", borderRadius: 3, color: "#8C8578", fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 12px", background: "transparent", cursor: "pointer", margin: "6px 0" }}>
+      {label} · hidden · tap to show
+    </button>
+  );
+}
+
 /** `only`: the builder's editor — just that page, drawn even when switched off. */
 export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits: DocEdits | null; narrow: boolean; only?: string }) {
   const d = vm.display;
@@ -156,8 +169,6 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
     if (cur[id]) delete cur[id]; else cur[id] = true;
     setD({ [key]: cur });
   };
-  const toggleSection = edits ? (k: string) => (on: boolean) => { const o = { ...off }; if (on) delete o[k]; else o[k] = true; setD({ off: o }); } : () => undefined;
-  const sectionToggle = (k: string) => (edits ? toggleSection(k) : undefined);
   const pad = narrow ? "18px 16px 14px" : undefined;
   const custName = vm.customer.name ?? "Customer";
   const where = vm.customer.address ?? vm.job.address;
@@ -181,15 +192,20 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
   const pages = pagesOf(d);
   const setPages = (next: ProposalPage[]) => setD({ pages: next });
   const pageToggle = (p: ProposalPage) => (edits ? (on: boolean) => setPages(patchPage(pages, p.id, { off: on ? undefined : true })) : undefined);
+  // A section of a page: off on the customer's copy, a dashed line to bring it back while editing.
+  const isOff = (p: ProposalPage, k: string) => partOff(p, k, off);
+  const partLabel = (p: ProposalPage, k: string) => PARTS[p.kind]?.find((x) => x.key === k)?.label ?? k;
+  const showPart = (p: ProposalPage, k: string) => (edits ? () => setPages(togglePart(pages, p.id, k, true, off)) : undefined);
+  const part = (p: ProposalPage, k: string, node: React.ReactNode) => <Part off={isOff(p, k)} label={partLabel(p, k)} onShow={showPart(p, k)}>{node}</Part>;
   // A page's heading: the owner's name for it when renamed, else the document's own word.
   const lab = (p: ProposalPage, fallback: string) => (p.label && p.label !== BUILT.find((b) => b.kind === p.kind)?.label ? p.label : fallback);
   const shownPhotos = (id: string) => (d.hide_area_pics || d.picsOff?.[id] ? [] : vm.visuals?.[id]?.photos ?? []);
 
   // Each page's body. The title page is the cover, the dark band and the header together.
   const bodies: Record<string, (p: ProposalPage) => React.ReactNode> = {
-    title: () => (
+    title: (p) => (
       <>
-        <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
+        <Section k="cover" label="Cover" off={isOff(p, "cover")} onToggle={edits ? (on) => setPages(togglePart(pages, p.id, "cover", on, off)) : undefined} narrow={narrow}>
           {/* A full sheet (Field or Pour) drawn from the job, or the old photo strip (Coy, 2026-10-22). */}
           {cover.style !== "strip" && <CoverPage vm={vm} edits={edits} kind={kind} dateStr={dateStr} />}
           {cover.style === "strip" && edits && <CoverControls c={cover} set={(patch) => setD({ cover: { ...cover, ...patch } })} pickCover={edits.pickCover} hasPhoto={!!vm.coverUrl} />}
@@ -213,7 +229,7 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
         {/* The dark band: the logo on the left, what it is on the right. Its own strip since 2026-10-05
             (Coy: "The cover should not include this dark header. I don't want to lose this when I turn the
             header off") — the Cover switch hides only the photo, the Header switch only what is below. */}
-        <div data-band className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
+        {part(p, "band", <div data-band className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
           {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
             : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
@@ -221,9 +237,9 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
             <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
             <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 17 : 20, lineHeight: 1.2 }}>{vm.job.title || "Concrete work"}</div>
           </div>
-        </div>
+        </div>)}
 
-        <Section k="header" label="Header" off={!!off.header} onToggle={sectionToggle("header")} narrow={narrow}>
+        <Section k="header" label="Header" off={isOff(p, "header")} onToggle={edits ? (on) => setPages(togglePart(pages, p.id, "header", on, off)) : undefined} narrow={narrow}>
           <div style={pad ? { padding: pad } : undefined}>
             <div className={narrow ? "flex flex-col gap-2" : "flex items-start gap-3"}>
               {/* The logo is on the dark band above, always — Coy: "redundant" here. */}
@@ -256,22 +272,22 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
     scope: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           {/* The job's own address, above the scope (Coy, 2026-10-12: "a job Information Line above Scope of Work"). */}
-          {vm.job.address && (
+          {vm.job.address && part(p, "info", (
             <div className="flex items-baseline gap-2 flex-wrap" style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid #E6DCC8" }}>
               <span style={kicker}>Job information</span>
               <span style={{ fontSize: 13 }}><span style={{ color: "#5E5A52" }}>Job site: </span><b style={{ fontWeight: 600 }}>{vm.job.address}</b></span>
             </div>
-          )}
+          ))}
           <div style={kicker}>{lab(p, "Scope of work")}</div>
           <h2 style={h2}>{vm.job.title || "The work"}</h2>
-          <div className="flex items-start gap-1.5">
+          {part(p, "intro", <div className="flex items-start gap-1.5">
             <div className="flex-1 min-w-0">
               <Grow label="Scope introduction" readOnly={!edits} value={vm.scopeIntro ?? vm.job.description ?? ""} onChange={(v) => edits?.intro(v)}
                 placeholder="A sentence or two on the work, in the customer's words…" style={{ fontSize: 13, color: "#2A2A2A" }} />
             </div>
             {edits && <DustyMark label="Ask Dusty to write the scope introduction" onClick={() => edits.dusty("scope")} />}
-          </div>
-          {vm.areas.length > 0 && (
+          </div>)}
+          {vm.areas.length > 0 && part(p, "areas", (
             <ol className="mt-3" style={{ listStyle: "none", padding: 0, margin: "12px 0 0", display: "grid", gap: "6px 22px", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
               {vm.areas.map((a, i) => (
                 <li key={a.id} className="flex gap-2">
@@ -287,8 +303,8 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
                 </li>
               ))}
             </ol>
-          )}
-          {!d.hide_area_pics && vm.areas.some((a) => vm.visuals?.[a.id]) && (
+          ))}
+          {!d.hide_area_pics && vm.areas.some((a) => vm.visuals?.[a.id]) && part(p, "visuals", (
             <div className="mt-4 flex flex-col gap-3">
               {vm.areas.map((a, i) => {
                 const v = vm.visuals?.[a.id];
@@ -317,7 +333,7 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
                 );
               })}
             </div>
-          )}
+          ))}
         </div>
     ),
     pricing: (p) => (
@@ -326,11 +342,11 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
             <div style={kicker}>{lab(p, "Pricing")}</div>
             <span className="flex-1" />
           </div>
-          {prelim && (
+          {prelim && part(p, "note", (
             <div className="mt-2" style={{ background: "#FBF6EC", border: "1px solid #E6DCC8", borderLeft: "3px solid #B85A3C", borderRadius: 3, padding: "8px 12px", fontSize: 12.5 }}>
               <b>Preliminary estimate.</b> This price is based on the information we have so far. The final price is confirmed after a site visit and exact measurements, and may change if the scope, access or thickness turn out different.
             </div>
-          )}
+          ))}
           {vm.choices ? (
             <Choices vm={vm} narrow={narrow} />
           ) : !vm.priced.ok ? (
@@ -350,7 +366,7 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
               )}
             </div>
           ) : (
-            <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} photosOf={shownPhotos} onPhoto={(photos, i) => setViewer({ photos, i })} />
+            <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} photosOf={isOff(p, "photos") ? () => [] : shownPhotos} onPhoto={(photos, i) => setViewer({ photos, i })} />
           )}
         </div>
     ),
@@ -365,7 +381,7 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
             <div style={kicker}>{lab(p, "Warranty")}</div>
             <TemplateTag name={vm.warranty.template} starter={vm.warranty.starter} edited={vm.warranty.edited} />
           </div>
-          <Grow label="Warranty title" readOnly={!edits} value={vm.warranty.title} onChange={(v) => edits?.warranty({ title: v, body: vm.warranty.body })} style={{ ...h2, marginTop: 4 }} />
+          {part(p, "title", <Grow label="Warranty title" readOnly={!edits} value={vm.warranty.title} onChange={(v) => edits?.warranty({ title: v, body: vm.warranty.body })} style={{ ...h2, marginTop: 4 }} />)}
           <Grow label="Warranty" readOnly={!edits} value={vm.warranty.body} onChange={(v) => edits?.warranty({ title: vm.warranty.title, body: v })} style={{ fontSize: 12.5, color: "#2A2A2A" }}
             placeholder="No warranty text — pick a template in the job panel, or write it here." />
           {edits && (
@@ -382,7 +398,7 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
             <div style={kicker}>{lab(p, "Terms & conditions")}</div>
             <TemplateTag name={vm.terms.template} starter={vm.terms.starter} edited={vm.terms.edited} />
           </div>
-          <h2 style={{ ...h2, marginTop: 4 }}>{vm.terms.title}</h2>
+          {part(p, "title", <h2 style={{ ...h2, marginTop: 4 }}>{vm.terms.title}</h2>)}
           <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {vm.terms.clauses.map((c, i) => (
               <li key={i} className="flex gap-2" style={{ position: "relative", marginBottom: 8 }}>
@@ -411,11 +427,12 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
     sign: (p) => (
         <div style={pad ? { padding: pad } : undefined}>
           <div style={kicker}>{lab(p, "Acceptance")}</div>
-          <p style={{ fontSize: 12.5, margin: "6px 0 18px" }}>
+          {part(p, "words", <p style={{ fontSize: 12.5, margin: "6px 0 18px" }}>
             The prices, scope, payment schedule and terms above are accepted. {vm.org.name} is authorized to do the work as described.
-          </p>
+          </p>)}
           <div className="grid gap-6" style={{ gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
             {[signer, vm.org.name].map((who, i) => {
+              if (i === 1 && isOff(p, "contractor")) return <Part key={i} off label={partLabel(p, "contractor")} onShow={showPart(p, "contractor")}>{null}</Part>;
               const sig = i === 0 ? vm.signature ?? null : null;
               return (
                 <div key={i}>
@@ -436,11 +453,12 @@ export function ProposalDocument({ vm, edits, narrow, only }: { vm: DocVM; edits
         </div>
     ),
     glance: (p) => <GlancePage title={lab(p, "At a glance")} total={vm.priced.ok && !vm.choices ? vm.priced.total : null} draws={vm.draws}
-      areas={vm.areas.map((a) => a.name || a.work_type || "Area")} start={vm.startLabel ?? null} display={d} setD={edits ? setD : null} />,
-    ifind: (p) => <IfFindPage title={lab(p, "If we find…")} lines={d.ifind ?? []} setD={edits ? setD : null} onAdd={edits?.addIfFind} />,
+      areas={vm.areas.map((a) => a.name || a.work_type || "Area")} start={vm.startLabel ?? null} display={d} setD={edits ? setD : null}
+      part={(k, node) => part(p, k, node)} />,
+    ifind: (p) => <IfFindPage title={lab(p, "If we find…")} lines={d.ifind ?? []} setD={edits ? setD : null} onAdd={edits?.addIfFind} part={(k, node) => part(p, k, node)} />,
     text: (p) => (
       <>
-        {p.label && <h2 style={{ ...h2, fontFamily: strong, fontWeight: 700, fontSize: 20 }}>{p.label}</h2>}
+        {p.label && part(p, "heading", <h2 style={{ ...h2, fontFamily: strong, fontWeight: 700, fontSize: 20 }}>{p.label}</h2>)}
         {edits ? <TextEditor body={p.body ?? ""} onChange={(s) => setPages(patchPage(pages, p.id, { body: s }))} onDusty={() => edits.dusty("page", p.id)} /> : <TextBody body={p.body} />}
       </>
     ),
@@ -706,7 +724,7 @@ function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, 
         <div key={i.id} className="grid items-center" style={{ gridTemplateColumns: cols, padding: "3px 0 3px 30px", borderTop: "1px dotted #EDE6D8", fontSize: 12, opacity: i.hidden ? 0.45 : 1 }}>
           <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
             {edits && (
-              <button type="button" onClick={() => flip("linesOff", i.id)} aria-label={`${i.hidden ? "Show" : "Hide"} ${i.name}`} title={i.hidden ? "Hidden — tap to show" : "Shown — tap to hide"} className="sc-no-print shrink-0"
+              <button type="button" onClick={() => flip("linesOff", i.id)} aria-label={`${i.hidden ? "Show" : "Hide"} ${i.name}`} title={i.hidden ? "Words hidden — still in the price · tap to show" : "Shown — tap to hide its words (the price stays)"} className="sc-no-print shrink-0"
                 style={{ width: 10, height: 10, borderRadius: 999, border: `1.5px solid ${i.hidden ? "#B3AA9A" : "#2F8A5B"}`, background: i.hidden ? "transparent" : "#2F8A5B", padding: 0, cursor: "pointer" }} />
             )}
             {pick && i.addon && !allAddon && <PickBox on={pick.has(i.id)} label={`Add ${i.name}`} onChange={pick.set ? (on) => pick.set!([i.id], on) : null} />}

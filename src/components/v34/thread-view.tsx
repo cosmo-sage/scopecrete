@@ -1,5 +1,6 @@
 "use client";
 
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import { Emblem } from "@/components/site/marks";
 import { askDustyBrief } from "@/lib/v34/dusty-brief";
 import React, { useState, useEffect, useCallback } from "react";
@@ -87,6 +88,7 @@ export function ThreadView({ contactId, embedded = false }: {
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
+  const moreRef = useDismiss(more, () => setMore(false));
   // The conversation's text size, like Dusty's chat (Coy, 2026-10-09), saved to the account.
   const [sizeKey, setSizeKey] = usePref<string>("thread_font", "m");
   const size = textSize(sizeKey);
@@ -508,7 +510,7 @@ export function ThreadView({ contactId, embedded = false }: {
               <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
                 className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
             </span>
-            <div className="relative">
+            <div className="relative" ref={moreRef}>
               <button onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label="More" style={{ ...pill, padding: "0 8px" }}>⋯</button>
               {more && (
                 <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 32, minWidth: 180, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>

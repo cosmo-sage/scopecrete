@@ -17,6 +17,7 @@
  *  - SectionHead, Empty, RecentCard, JobRow — the Overview's parts.
  */
 
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, formatPhone, strong, light } from "@/lib/v34/tokens";
@@ -77,6 +78,7 @@ export function RecordHeader({ back, title, wide, actions, menu, meta, children,
   emblem?: { onClick: () => void; title: string };
 }) {
   const [more, setMore] = useState(false);
+  const moreRef = useDismiss(more, () => setMore(false));
   // The tab's word, without its count ("Jobs 2" → "Jobs").
   const tabLabel = (tabs.find(([k]) => k === tab)?.[1] ?? "").replace(/\s+\d+$/, "");
   const [tabMenu, setTabMenu] = useState(false);
@@ -131,13 +133,13 @@ export function RecordHeader({ back, title, wide, actions, menu, meta, children,
             ? <Link key={a.label} href={a.href} title={a.title} style={style(a)}>{a.label}</Link>
             : <button key={a.label} onClick={a.onClick} disabled={a.disabled} title={a.title} style={style(a)}>{a.label}</button>)}
           {emblem && (
-            <button onClick={emblem.onClick} aria-label={emblem.title} title={emblem.title}
+            <button className="sc-dusty-page-btn" onClick={emblem.onClick} aria-label={emblem.title} title={emblem.title}
               style={{ ...pill, padding: "0 4px", width: 34, justifyContent: "center" }}>
               <DustyEmblem size={24} hidden />
             </button>
           )}
           {inMenu.length > 0 && (
-            <div className="relative">
+            <div className="relative" ref={moreRef}>
               <button onClick={() => setMore((v) => !v)} aria-label="More" aria-expanded={more} style={{ ...pill, padding: "0 9px" }}>⋯</button>
               {more && (
                 <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 34, minWidth: 200, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>

@@ -16,6 +16,7 @@
  * card sheet (cost-cards.tsx), which also shows the card's price history.
  */
 
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import React, { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { refreshQuestion } from "@/lib/dusty/price-refresh";
@@ -77,6 +78,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [tab, setTab] = useState<"cards" | "assemblies">("cards");
   const [finding, setFinding] = useState(false);
   const [sortMenu, setSortMenu] = useState(false);
+  const sortRef = useDismiss(sortMenu, () => setSortMenu(false));
   const [q, setQ] = useState("");
   // "Show retired" is gone (Coy, 2026-10-10); retired cards stay out of the list.
   const retired = false;
@@ -88,6 +90,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [colPrefs, setColPrefs] = usePref<ColPrefs>("pricebook_cols", { w: {}, hidden: [] });
   const [liveW, setLiveW] = useState<Record<string, number> | null>(null);
   const [colMenu, setColMenu] = useState(false);
+  const colRef = useDismiss(colMenu, () => setColMenu(false));
   // "Now" as of the last load — for "old price" and recent imports — so render stays pure.
   const [now, setNow] = useState(0);
   const reload = () => setTick((n) => n + 1);
@@ -400,7 +403,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
             on a phone too, 2026-10-11). */}
         <div className="flex items-center gap-2" style={{ marginLeft: "auto" }}>
         {/* "Sort by: Vendor ▾" (Coy, 2026-10-22; was a By group | By vendor toggle). */}
-        <div className="relative">
+        <div className="relative" ref={sortRef}>
           <button onClick={() => setSortMenu((m) => !m)} aria-expanded={sortMenu} aria-haspopup="menu" className="rounded px-2.5"
             style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
             Sort by: {view === "group" ? "Group" : "Vendor"} ▾
@@ -418,7 +421,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         </div>
         {pick && <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find in the Price book" />}
         {wide && (
-          <div className="relative">
+          <div className="relative" ref={colRef}>
             <button onClick={() => setColMenu((m) => !m)} aria-expanded={colMenu} className="rounded px-2.5"
               style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
               Columns{hiddenCols.length ? ` · ${hiddenCols.length} hidden` : ""} ▾

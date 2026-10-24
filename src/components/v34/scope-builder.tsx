@@ -13,7 +13,7 @@ import { MenuButton, PageHeader, SearchBubble, SearchToggle, SlideDrawer } from 
 import { usePref } from "@/lib/v34/prefs";
 import { BulkBar, BulkTick, send, type BulkEdit } from "@/components/v34/bulk-bar";
 import { useWide } from "@/lib/v34/use-wide";
-import { STAGES } from "@/lib/jobs/stages";
+import { STAGES, stageOf } from "@/lib/jobs/stages";
 import { SCOPE_STEPS, stepHref, type Market, type ScopeFacts, type ScopeProgress, type ScopeStep } from "@/lib/scope-builder";
 
 interface Scope {
@@ -22,6 +22,17 @@ interface Scope {
   facts: ScopeFacts; progress: ScopeProgress; total: number | null;
 }
 type MarketPick = "all" | Market;
+// Sort and a stage filter (Coy, 2026-10-24: "I want to be able to filter and sort my jobs list").
+type SortPick = "updated" | "newest" | "oldest" | "name" | "price";
+const SORTS: Array<[SortPick, string]> = [["updated", "Last changed"], ["newest", "Newest"], ["oldest", "Oldest"], ["name", "Name A–Z"], ["price", "Price, highest"]];
+function sortScopes(list: Scope[], by: SortPick): Scope[] {
+  const t = (x: string) => new Date(x).getTime();
+  return [...list].sort((a, b) => by === "name" ? a.title.localeCompare(b.title)
+    : by === "newest" ? t(b.created_at) - t(a.created_at)
+    : by === "oldest" ? t(a.created_at) - t(b.created_at)
+    : by === "price" ? (b.total ?? -1) - (a.total ?? -1)
+    : t(b.updated_at) - t(a.updated_at));
+}
 
 const ago = (iso: string) => {
   const d = (Date.now() - new Date(iso).getTime()) / 86400000;
@@ -57,6 +68,11 @@ export function ScopeBuilderPage() {
   });
   const [step, setStep] = useState<ScopeStep | "all">("all");
   const [q, setQ] = useState("");
+  const [stage, setStage] = useState<string>("all");
+  const [sort, setSortRaw] = useState<SortPick>(() => {
+    try { return (localStorage.getItem("sc:scope-sort") as SortPick) || "updated"; } catch { return "updated"; }
+  });
+  const setSort = (v: SortPick) => { setSortRaw(v); try { localStorage.setItem("sc:scope-sort", v); } catch { /* private */ } };
   const [searching, setSearching] = useState(false);
   const [filters, setFilters] = useState(false);
   const [reload, setReload] = useState(0);
@@ -76,8 +92,11 @@ export function ScopeBuilderPage() {
     for (const s of inMarket) c[s.progress.next] = (c[s.progress.next] ?? 0) + 1;
     return c;
   }, [inMarket]);
-  const shown = inMarket.filter((s) => (step === "all" || s.progress.next === step)
-    && (!q.trim() || `${s.title} ${s.customer ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(q.trim().toLowerCase())));
+  const shown = sortScopes(inMarket.filter((s) => (step === "all" || s.progress.next === step)
+    && (stage === "all" || stageOf(s.status).k === stage)
+    && (!q.trim() || `${s.title} ${s.customer ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))), sort);
+  const stageCount = (k: string) => inMarket.filter((s) => stageOf(s.status).k === k).length;
+  const filterCount = (market !== "all" ? 1 : 0) + (step !== "all" ? 1 : 0) + (stage !== "all" ? 1 : 0);
   // Bulk (Coy, 2026-10-22): tick jobs, then move their stage, change their type or delete them together.
   const toggle = (id: string) => setSel((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
   const allOn = shown.length > 0 && shown.every((j) => sel.includes(j.id));
@@ -103,6 +122,15 @@ export function ScopeBuilderPage() {
         sub="Every scope from files to a sent proposal: Files → Takeoffs → Budget → Proposal. A row opens the job on its next step."
         menu={<MenuButton always onClick={() => setFilters(true)} label="Filter scopes" />}
         actions={<>
+          <button onClick={() => setFilters(true)} className="rounded inline-flex items-center gap-1" aria-label="Filter and sort"
+            style={{ height: 32, padding: "0 10px", border: `1px solid ${filterCount ? T.hiviz : T.hair}`, background: T.card, color: T.ink2, fontSize: F.sm, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer" }}>
+            Filter{filterCount ? ` · ${filterCount}` : ""} · Sort
+          </button>
+          {/* The kanban board is still here (Coy, 2026-10-24: "where is the kanban board?"). */}
+          <Link href="/dashboard/scope" className="rounded inline-flex items-center"
+            style={{ height: 32, padding: "0 10px", border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: F.sm, fontWeight: 600, whiteSpace: "nowrap" }}>
+            Board
+          </Link>
           <SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />
           {/* Back on the header (Coy, 2026-10-22: "the add new job button doesn't make a clear path"). */}
           <Link href="/dashboard/jobs/new" className="sc-new-btn rounded inline-flex items-center"
@@ -111,16 +139,27 @@ export function ScopeBuilderPage() {
           </Link>
         </>}>
         {searching && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setSearching(false)} placeholder="Find a scope, customer or address" /></div>}
-        {(market !== "all" || step !== "all") && (
+        {(market !== "all" || step !== "all" || stage !== "all") && (
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             {market !== "all" && <button style={{ ...pill(true), height: 24 }} onClick={() => pickMarket("all")}>{market === "residential" ? "Residential" : "Commercial & government"} ×</button>}
             {step !== "all" && <button style={{ ...pill(true), height: 24 }} onClick={() => setStep("all")}>{step === "sent" ? "Sent" : `Needs ${(SCOPE_STEPS.find((x) => x.k === step)?.label ?? "").toLowerCase()}`} ×</button>}
+            {stage !== "all" && <button style={{ ...pill(true), height: 24 }} onClick={() => setStage("all")}>{STAGES.find((x) => x.k === stage)?.label} ×</button>}
           </div>
         )}
       </PageHeader>
       <SlideDrawer open={filters} onClose={() => setFilters(false)} width={280} label="Filter scopes">
         <div className="p-3 flex flex-col gap-1" style={{ color: T.ink }}>
-          <div style={{ ...eyebrow, padding: "4px 2px" }}>Market</div>
+          <div style={{ ...eyebrow, padding: "4px 2px" }}>Sort</div>
+          {SORTS.map(([k, l]) => (
+            <button key={k} onClick={() => setSort(k)} className="text-left rounded" style={{ padding: "8px 10px", fontSize: F.sm, background: sort === k ? T.slab : "transparent", fontWeight: sort === k ? 700 : 500, color: T.ink }}>{sort === k ? "✓ " : ""}{l}</button>
+          ))}
+          <div style={{ ...eyebrow, padding: "12px 2px 4px" }}>Stage</div>
+          {([["all", "Every stage"], ...STAGES.filter((st) => st.k !== "lost").map((st) => [st.k, st.label])] as Array<[string, string]>).map(([k, l]) => (
+            <button key={k} onClick={() => setStage(k)} className="text-left rounded flex" style={{ padding: "8px 10px", fontSize: F.sm, background: stage === k ? T.slab : "transparent", fontWeight: stage === k ? 700 : 500, color: T.ink }}>
+              <span className="flex-1">{l}</span>{k !== "all" && <span style={{ color: T.ink3, ...nums }}>{stageCount(k)}</span>}
+            </button>
+          ))}
+          <div style={{ ...eyebrow, padding: "12px 2px 4px" }}>Market</div>
           {([["all", `All · ${(scopes ?? []).filter((s) => s.status !== "lost").length}`], ["residential", `Residential · ${mCount("residential")}`], ["commercial", `Commercial & government · ${mCount("commercial")}`]] as Array<[MarketPick, string]>).map(([k, l]) => (
             <button key={k} onClick={() => pickMarket(k)} className="text-left rounded" style={{ padding: "8px 10px", fontSize: F.sm, background: market === k ? T.slab : "transparent", fontWeight: market === k ? 700 : 500, color: T.ink }}>{l}</button>
           ))}

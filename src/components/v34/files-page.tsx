@@ -34,6 +34,8 @@ import { useWide } from "@/lib/v34/use-wide";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel } from "@/lib/files";
 import { EMPTY_FILTER, FILE_KINDS, FILE_SOURCES, SINCE_DAYS, activeChips, filterQuery, readFilter, type FileFilter } from "@/lib/files-filter";
 import { CATEGORY_FOLDERS, activeFolder, byMonth, folderPatch, isPhotosView, sameFolder, storageLabel, type Folder } from "@/lib/files-view";
+import { clearFilesFolders, setFilesFolders } from "@/lib/v34/files-folders";
+import { useSpacesNav } from "@/components/v34/contact-thread-head";
 
 type Facet = { id: string; name: string; n: number };
 type Facets = { jobs: Facet[]; customers: Facet[]; vendors: Facet[]; people: Facet[] };
@@ -217,6 +219,26 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       ) : null },
   ];
 
+  /* Under Spaces the folders live under the drawer's Files row (Coy, 2026-10-24), not in a column here. */
+  const spaces = useSpacesNav() && !embedded;
+  const goRef = React.useRef(go);
+  useEffect(() => { goRef.current = go; });
+  const folderSig = JSON.stringify([here, photos, facets ? GROUPS.map(([l]) => (facets[l] ?? []).map((x) => [x.id, x.n])) : null, fixed?.customer ?? null]);
+  useEffect(() => {
+    if (!spaces) { clearFilesFolders(); return; }
+    const item = (f: Folder, label: string, n?: number) => ({ id: JSON.stringify(f), label, n, on: sameFolder(here, f) });
+    setFilesFolders({
+      top: [item({ kind: "all" }, photos ? "All photos" : "All files"), item({ kind: "recent" }, "Recent")],
+      kinds: CATEGORY_FOLDERS.map(([k, l]) => item({ kind: "cat", cat: k }, l)),
+      groups: GROUPS.filter(([, key]) => !(key === "customer" && fixed?.customer)).map(([list, key, label]) => ({
+        key, label, loading: !facets, on: here.kind === key,
+        items: (facets?.[list] ?? []).map((x) => item({ kind: key, id: x.id } as Folder, x.name, x.n)),
+      })),
+    }, (id) => goRef.current(JSON.parse(id) as Folder));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- folderSig carries what the list shows
+  }, [spaces, folderSig]);
+  useEffect(() => () => clearFilesFolders(), []);
+
   /* ---------------------------------------------------------- folder column */
   const folderBtn = (f: Folder, label: string, n?: number, indent = false) => {
     const on = sameFolder(here, f);
@@ -379,7 +401,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         a phone, Files, the filter and search icons, one line on what it holds.
         Embedded on a customer's tab it is just the icons' row. */}
     {!embedded && (
-      <PageHeader title="Files" menu={!wide ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
+      <PageHeader title="Files" menu={!wide && !spaces ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
         sub="Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search the words in them, or any name."
         actions={<>
           <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} sheet={!wide} />
@@ -405,7 +427,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       {embedded && searching && <div style={{ marginBottom: 8 }}>{search}</div>}
 
       <div className="flex items-start" style={{ gap: 16 }}>
-        {wide && (
+        {wide && !spaces && (
           <aside aria-label="Folders and storage" className="rounded"
             style={{ width: 232, flexShrink: 0, position: "sticky", top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)", height: "calc(100dvh - var(--sc-head) - var(--sc-subhead, 0px) - 24px)",
                      maxHeight: 760, background: T.card, border: `1px solid ${T.hair}`, overflow: "hidden" }}>

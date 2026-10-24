@@ -708,6 +708,8 @@ html[data-nav="spaces"] .sc-old-thread-rail,
 html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
 /* No back links at the top left under Spaces (Coy, 2026-10-18): the rail and drawer are a swipe away. */
 html[data-nav="spaces"] .sc-back-link { display: none !important; }
+/* No Dusty emblem on page headers under Spaces (Coy, 2026-10-24): his chat is in the page already. */
+html[data-nav="spaces"] .sc-dusty-page-btn { display: none !important; }
 .sc-drawer-empty { display: none; }
 html[data-nav="spaces"] .sc-drawer-listed { display: none !important; }
 html[data-nav="spaces"] .sc-drawer-pane { display: block !important; flex: 1; }

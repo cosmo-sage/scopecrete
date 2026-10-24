@@ -177,6 +177,9 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
         actions={[]}
         emblem={{ title: "Ask Dusty about this customer", onClick: openDusty }}
         menu={[
+          // Under Spaces the emblem is off the header (Coy, 2026-10-24), so its two buttons are here too.
+          <button key="edit" onClick={() => setEditing(true)} style={menuItem}>Edit customer</button>,
+          ...(primary ? [<button key="job" onClick={() => void newScope()} style={menuItem}>New job</button>] : []),
           <ArchiveButton key="del" kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
             style={{ ...menuItem, color: T.red }}>Delete customer</ArchiveButton>,
         ]}

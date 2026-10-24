@@ -9,6 +9,7 @@
  * confirmation text, which goes through Quo on Coy's Send. "+ Schedule" adds one by hand; Dusty adds them from
  * the chat ("I have an appointment with … Thursday 12 to 1").
  */
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { T, F, eyebrow, nums } from "@/lib/v34/tokens";
 import { Emblem } from "@/components/site/marks";
@@ -104,6 +105,7 @@ function Row({ a, patch, past }: { a: AppointmentRow; patch: (id: string, b: Rec
   const org = useContext(OrgNameContext) ?? me?.org_name ?? null;
   const [moving, setMoving] = useState(false);
   const [calOpen, setCalOpen] = useState(false);
+  const calRef = useDismiss(calOpen, () => setCalOpen(false));
   const st = STATUS[a.status] ?? STATUS.scheduled;
   const live = a.status === "scheduled" || a.status === "confirmed";
   const btn: React.CSSProperties = { height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.xs, fontWeight: 600, cursor: "pointer" };
@@ -140,7 +142,7 @@ function Row({ a, patch, past }: { a: AppointmentRow; patch: (id: string, b: Rec
 
       {live && !moving && (
         <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
-          <div style={{ position: "relative" }}>
+          <div style={{ position: "relative" }} ref={calRef}>
             <button onClick={() => setCalOpen((v) => !v)} style={btn} aria-expanded={calOpen}>Add to calendar ▾</button>
             {calOpen && (
               <div className="flex flex-col" style={{ position: "absolute", top: 32, left: 0, zIndex: 20, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 4, boxShadow: "0 6px 18px rgba(0,0,0,.12)", minWidth: 200 }}>

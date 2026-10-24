@@ -14,6 +14,7 @@
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
  */
 
+import { useDismiss } from "@/lib/v34/use-dismiss";
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -30,6 +31,7 @@ import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import { usePref } from "@/lib/v34/prefs";
 import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
+import { pickFilesFolder, useFilesFolders } from "@/lib/v34/files-folders";
 import { ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import {
   activeTreeRow, contactThreads, jobTree, monogram, spaceOf, stageColor, stageLabel,
@@ -232,10 +234,11 @@ function ShelfGlyph({ k }: { k: string }) {
  */
 function ShelfIconPick({ shelf, onPick }: { shelf: { id: string; icon?: string }; onPick: (icon: string) => void }) {
   const [open, setOpen] = useState(false);
+  const boxRef = useDismiss<HTMLSpanElement>(open, () => setOpen(false));
   const cur = shelfIcon(shelf);
   if (isStandardShelf(shelf.id)) return <span className="sc-shelf-ico-btn" title="A standard shelf keeps its own icon" style={{ cursor: "default" }}><ShelfGlyph k={cur} /></span>;
   return (
-    <span style={{ position: "relative", flex: "none" }}>
+    <span style={{ position: "relative", flex: "none" }} ref={boxRef}>
       <button type="button" className="sc-shelf-ico-btn" aria-expanded={open} aria-label="Pick this shelf's icon" title="Pick an icon" onClick={() => setOpen(!open)}><ShelfGlyph k={cur} /></button>
       {open && (
         <span className="sc-shelf-ico-grid" role="listbox" aria-label="Shelf icons">
@@ -252,10 +255,11 @@ function ShelfIconPick({ shelf, onPick }: { shelf: { id: string; icon?: string }
 /** Picking the colour of a shelf's line, from the menu's colour book, so it follows the theme. */
 function ShelfColorPick({ shelf, onPick }: { shelf: { color?: string }; onPick: (color: string) => void }) {
   const [open, setOpen] = useState(false);
+  const boxRef = useDismiss<HTMLSpanElement>(open, () => setOpen(false));
   const cur = shelfLine(shelf);
   const swatch = (k: string) => <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 3, background: iconVar(k as IconRole) }} />;
   return (
-    <span style={{ position: "relative", flex: "none" }}>
+    <span style={{ position: "relative", flex: "none" }} ref={boxRef}>
       <button type="button" className="sc-shelf-ico-btn" aria-expanded={open} aria-label="Pick the colour of this shelf's line" title="Line colour" onClick={() => setOpen(!open)}>{swatch(cur)}</button>
       {open && (
         <span className="sc-shelf-ico-grid" role="listbox" aria-label="Line colours" style={{ gridTemplateColumns: "repeat(5, 28px)", width: 166 }}>
@@ -276,6 +280,25 @@ function GearIcon({ size = 13 }: { size?: number }) {
       <path d="M15.96 7.96L18.3 8.72L18.3 11.28L15.96 12.04A6.3 6.3 0 0 1 15.66 12.77L16.78 14.96L14.96 16.78L12.77 15.66A6.3 6.3 0 0 1 12.04 15.96L11.28 18.3L8.72 18.3L7.96 15.96A6.3 6.3 0 0 1 7.23 15.66L5.04 16.78L3.22 14.96L4.34 12.77A6.3 6.3 0 0 1 4.04 12.04L1.7 11.28L1.7 8.72L4.04 7.96A6.3 6.3 0 0 1 4.34 7.23L3.22 5.04L5.04 3.22L7.23 4.34A6.3 6.3 0 0 1 7.96 4.04L8.72 1.7L11.28 1.7L12.04 4.04A6.3 6.3 0 0 1 12.77 4.34L14.96 3.22L16.78 5.04L15.66 7.23A6.3 6.3 0 0 1 15.96 7.96Z" strokeLinejoin="round" />
     </svg>
   );
+}
+
+/**
+ * The address's ?query, kept current. A tap on a drawer row that only changes ?tab= (a vendor's
+ * Receipts vs Bid requests, the Budget's tools) doesn't change the path, and reading
+ * window.location 50 ms after the tap could catch the old one — the drawer lit one row while
+ * the page showed another (Coy, 2026-10-24). Read on every same-document navigation instead
+ * (the Navigation API; a short poll where a browser lacks it), not useSearchParams, which would
+ * need a Suspense boundary round the whole rail.
+ */
+function subscribeSearch(cb: () => void) {
+  const nav = (window as unknown as { navigation?: EventTarget }).navigation;
+  window.addEventListener("popstate", cb);
+  nav?.addEventListener("currententrychange", cb);
+  const t = nav ? null : window.setInterval(cb, 300);
+  return () => { window.removeEventListener("popstate", cb); nav?.removeEventListener("currententrychange", cb); if (t) window.clearInterval(t); };
+}
+function useLiveSearch(): string {
+  return React.useSyncExternalStore(subscribeSearch, () => window.location.search, () => "");
 }
 
 function Row({ href, label, sub, on, icon, avatar, color, indent, onPick, when, count }: {
@@ -519,6 +542,48 @@ function VendorTrades({ onPick }: { onPick: () => void }) {
       {f.trades.map((t) => item(`t:${t.trade}`, t.trade, t.n, f.trade === t.trade, () => setVendorFilter({ trade: t.trade })))}
       {f.kinds.length > 0 && <div className="sc-space-row-s" style={{ padding: "8px 0 2px 40px", textTransform: "uppercase", letterSpacing: ".06em", fontSize: 10 }}>Kind</div>}
       {f.kinds.filter((k) => k.k === "all" || k.n > 0).map((k) => item(`k:${k.k}`, k.label, k.n, f.sub === k.k, () => setVendorFilter({ sub: k.k })))}
+    </div>
+  );
+}
+
+/**
+ * The Files page's folders under its row in the drawer while it is open (Coy, 2026-10-24: "can we move
+ * this nested under the files tool in the drawer?"): All files, Recent, the kinds, then Jobs · Customers
+ * · Vendors · Contacts folding open. The page publishes them (`files-folders.ts`); a pick opens one.
+ */
+function FilesFolders({ onPick }: { onPick: () => void }) {
+  const f = useFilesFolders();
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  if (!f.top) return null;
+  const item = (x: { id: string; label: string; n?: number; on: boolean }, pad = 40) => (
+    <button key={x.id} type="button" className="sc-space-row" aria-current={x.on ? "true" : undefined} onClick={() => { pickFilesFolder(x.id); onPick(); }}
+      style={{ paddingLeft: pad, border: 0, width: "100%", background: x.on ? undefined : "none", textAlign: "left", cursor: "pointer", minHeight: 30 }}>
+      <span className="sc-space-row-l" style={{ flex: 1, fontWeight: x.on ? 600 : 400 }}>{x.label}</span>
+      {x.n !== undefined && <span className="sc-space-row-s" style={{ fontVariantNumeric: "tabular-nums" }}>{x.n}</span>}
+    </button>
+  );
+  const head: React.CSSProperties = { padding: "8px 0 2px 40px", textTransform: "uppercase", letterSpacing: ".06em", fontSize: 10 };
+  return (
+    <div role="group" aria-label="File folders">
+      {f.top.map((x) => item(x))}
+      <div className="sc-space-row-s" style={head}>Kinds</div>
+      {f.kinds.map((x) => item(x))}
+      {f.groups.map((g) => {
+        const isOpen = open[g.key] ?? g.on;
+        return (
+          <div key={g.key}>
+            <button type="button" className="sc-space-row-s" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [g.key]: !isOpen }))}
+              style={{ ...head, display: "flex", width: "100%", alignItems: "center", gap: 4, border: 0, background: "none", cursor: "pointer", paddingRight: 8 }}>
+              <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: isOpen ? "rotate(90deg)" : "none" }}>›</span>
+              <span style={{ flex: 1, textAlign: "left" }}>{g.label}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{g.loading ? "" : g.items.length}</span>
+            </button>
+            {isOpen && (g.items.length
+              ? g.items.map((x) => item(x, 54))
+              : <div className="sc-space-row-s" style={{ padding: "2px 0 4px 54px", fontSize: 11 }}>{g.loading ? "Loading…" : "None with files"}</div>)}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -783,6 +848,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                     <Row href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick} count={<CollCount k={k} />}
                       icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />
                     {k === "vendors" && <VendorTrades onPick={onPick} />}
+                    {k === "files" && <FilesFolders onPick={onPick} />}
                   </React.Fragment>
                 );
               })}
@@ -810,14 +876,8 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
 function JobDrawer({ id, fallback, onPick, rail }: { id: string; fallback: RailJob | null; onPick: () => void; rail: RailCtl }) {
   const d = useSpaceDetail("job", id);
   const path = usePathname() ?? "";
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
-  // A link inside the same page (Budget's ?tab=) doesn't change the path; read it after the tap.
-  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const search = useLiveSearch();
+  const pick = onPick;
   const status = d?.job?.status ?? fallback?.status ?? null;
   const title = d?.job?.title ?? fallback?.title ?? "Job";
   const here = activeTreeRow(path, search);
@@ -930,13 +990,8 @@ function JobNest({ job, open, onJob, onToggle, onPick }: {
   job: { id: string; title: string; status: string | null }; open: boolean; onJob: boolean; onToggle: () => void; onPick: () => void;
 }) {
   const path = usePathname() ?? "";
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
-  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const search = useLiveSearch();
+  const pick = onPick;
   const { layout } = useKindLayout("job");
   const d = useSpaceDetail("job", open ? job.id : null);
   const rows = useMemo(() => kindRows("job", job.id), [job.id]);
@@ -986,13 +1041,8 @@ function MemberShelf({ colId, m, closed, onToggle, onPick }: {
   const { layout } = useKindLayout(m.kind);
   const d = useSpaceDetail(m.kind, open ? m.id : null);
   const path = usePathname() ?? "";
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
-  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const search = useLiveSearch();
+  const pick = onPick;
   const rows = useMemo(() => kindRows(m.kind, m.id), [m.kind, m.id]);
   const byK = new Map(rows.map((r) => [r.k, r]));
   const order = layout.shelves.flatMap((sh) => sh.rows).filter((k) => byK.has(k) || isToolRow(k));
@@ -1067,13 +1117,8 @@ function CollectionListDrawer({ list, current, onPick, onBack }: {
   const rows = useCollectionList(list);
   const [q, setQ] = useState("");
   const path = usePathname() ?? "";
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
-  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const search = useLiveSearch();
+  const pick = onPick;
   const kind: LayoutKind | null = list === "customers" ? "customer" : list === "vendors" ? "vendor" : list === "scope" ? "job" : null;
   const detail = useSpaceDetail(kind ?? "customer", kind ? current : null);
   const here = kind === "job" ? activeTreeRow(path, search) : activeTab(search);
@@ -1158,13 +1203,8 @@ function RecordDrawer({ kind, id, rail, onPick, onBack, pinnedName }: {
   kind: "customer" | "vendor"; id: string; rail: RailCtl; onPick: () => void; onBack: () => void; pinnedName: string | null;
 }) {
   const path = usePathname() ?? "";
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
-  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const search = useLiveSearch();
+  const pick = onPick;
   const name = useRecordName(kind, id, pinnedName);
   const onPage = path.startsWith(kind === "customer" ? `/dashboard/customers/${id}` : `/dashboard/vendors/${id}`);
   const here = onPage ? activeTab(search) : "";
@@ -1498,12 +1538,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
   const [colRaw] = usePref<unknown>("spaces_collections", {});
   const [memRaw] = usePref<unknown>("spaces_col_members", {});
   const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
-  const [search, setSearch] = useState("");
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
-    return () => { off = true; };
-  }, [path]);
+  const search = useLiveSearch();
   const icon = (key: string, label: string, href: string, on: boolean, glyph: React.ReactNode) => (
     <Link key={key} href={href} className="sc-strip-ico no-underline" title={label} aria-label={label} aria-current={on ? "page" : undefined}>{glyph}</Link>
   );
@@ -1681,12 +1716,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const jobs = rail?.jobs ?? [];
   const jobOf = (id: string) => jobs.find((j) => j.id === id) ?? null;
   const close = desktop ? () => {} : onPhoneClose;
-  const [threadParam, setThreadParam] = useState<string | null>(null);
-  useEffect(() => {
-    let off = false;
-    Promise.resolve().then(() => { if (!off) setThreadParam(new URLSearchParams(window.location.search).get("t")); });
-    return () => { off = true; };
-  }, [path]);
+  const threadParam = new URLSearchParams(useLiveSearch()).get("t");
   const colHere = /^\/dashboard\/messages(\/[^/]+)?$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
     ? { kind: "collection" as const, id: threadParam } : null;
   const listRec = !peek && list ? collectionRecordAt(list, path) : null;

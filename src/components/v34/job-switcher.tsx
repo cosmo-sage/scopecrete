@@ -5,7 +5,9 @@
  * the top. The job name needs to look clickable."). A tap on the job's name at the top of any job
  * view opens it: every job not archived, newest first, with a search; a pick opens the same view
  * (Summary, Takeoffs, Budget or Proposal) on that job. Read through GET /api/jobs, so RLS decides
- * which jobs are listed (an onsite estimator sees only theirs).
+ * which jobs are listed (an onsite estimator sees only theirs). Since 2026-10-24 it drops down
+ * from the page header (Coy: "drop down from the page header, not slide from the side"), and its
+ * search waits for a tap so a phone's keyboard doesn't open by itself.
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -45,9 +47,9 @@ export function JobSwitcher({ open, onClose, jobId, href }: {
   }, [jobs, q]);
 
   return (
-    <Drawer open={open} onClose={onClose} title="Jobs" sub={jobs ? `${jobs.length} · newest first` : undefined}>
+    <Drawer drop open={open} onClose={onClose} title="Jobs" sub={jobs ? `${jobs.length} · newest first` : undefined}>
       <div className="px-3 pt-3 pb-2" style={{ position: "sticky", top: 0, background: T.card, zIndex: 1 }}>
-        <SearchBubble value={q} onChange={setQ} placeholder="Find a job — name, customer, street…" />
+        <SearchBubble value={q} onChange={setQ} placeholder="Find a job — name, customer, street…" autoFocus={false} />
       </div>
       {err && <div className="px-4 py-3" style={{ fontSize: F.sm, color: T.red }}>{err}</div>}
       {!jobs && !err && <div className="px-4 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Loading jobs…</div>}

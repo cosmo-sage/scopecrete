@@ -105,13 +105,14 @@ export type PlanAction =
   // Or have dusty do it for me"): opens the composer on the job with these ticked — areas by ref, cost types, Price book
   // items by ref, vendors by full contact id. Nothing is sent: Coy picks who and taps Send there.
   | { do: "bid_request"; job: string; areas: string[]; groups: Array<"labor" | "materials" | "equipment" | "other">; items: string[]; vendors: string[] }
+  | { do: "use_bid"; job: string; recipient: string; replace: boolean; vendor: string | null }
   | { do: "work_space"; name: string; shelves: string[]; members: Array<{ kind: "job" | "customer" | "vendor"; id: string; name: string; shelf: string | null }>; tools: string[] }
   | { do: "new_vendor"; name: string; kind: "supplier" | "subcontractor" | "equipment"; phone: string | null; email: string | null;
       website: string | null; address: string | null; service_area: string | null; source: string;
       from: "web" | "file" | "words"; contact?: string; key?: string; trades?: string[]; note?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "email", "send_proposal", "new_vendor", "appointment", "update_appointment", "work_space", "bid_request"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "email", "send_proposal", "new_vendor", "appointment", "update_appointment", "work_space", "bid_request", "use_bid"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -340,6 +341,11 @@ function cleanActionBase(raw: unknown): PlanAction | null {
         .filter((x): x is "labor" | "materials" | "equipment" | "other" => !!x).filter((x, i, l) => l.indexOf(x) === i);
       const vendors = (Array.isArray(r.vendors) ? r.vendors : []).filter((x): x is string => typeof x === "string" && FULL_ID.test(x.trim())).map((x) => x.trim().toLowerCase()).slice(0, 20);
       return { do: "bid_request", job, areas: refs(r.areas), groups, items: refs(r.items), vendors };
+    }
+    case "use_bid": {
+      const id = (v: unknown) => (typeof v === "string" && FULL_ID.test(v.trim()) ? v.trim().toLowerCase() : null);
+      const job = id(r.job), recipient = id(r.recipient);
+      return job && recipient ? { do: "use_bid", job, recipient, replace: r.replace !== false, vendor: str(r.vendor, 80) } : null;
     }
     case "work_space": {
       const name = str(r.name, 80);
@@ -575,6 +581,7 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
         : [a.groups.length ? a.groups.join(" and ") : null, a.areas.length ? `in ${a.areas.length} section${a.areas.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" ") || "the whole budget";
       return `Open a bid request on the job with ${what} ticked${a.vendors.length ? `, ${a.vendors.length} vendor${a.vendors.length === 1 ? "" : "s"} picked` : ""} — you pick who and tap Send`;
     }
+    case "use_bid": return `Put ${a.vendor ? `${a.vendor}'s` : "the vendor's"} bid on the budget as one whole-job line at their total, linked to the bid${a.replace ? ", and take off the lines it priced" : ""}`;
     case "work_space": {
       const n = a.members.length;
       return `Make the Work Space “${a.name}”${n ? ` with ${n} job${n === 1 ? "" : "s"}, customer${n === 1 ? "" : "s"} or vendor${n === 1 ? "" : "s"}` : " (blank)"}${a.shelves.length ? ` on shelves ${a.shelves.map((x) => `“${x}”`).join(", ")}` : ""}${a.tools.length ? `, tools: ${a.tools.join(", ")}` : ""}`;
@@ -694,6 +701,11 @@ Bid requests. When Coy asks you to get bids, prices or a quote from vendors or s
 [{"do":"bid_request","job":"<full job id>","areas":["<8-char area ref>"],"groups":["labor"],"items":["<8-char item ref>"],"vendors":["<full contact id of a vendor in the CONTEXT>"]}]
 \`\`\`
 "items" (Price book item refs on the budget) pick exactly those lines; otherwise every line of the "areas" and "groups" (labor, materials, equipment, other) named; leave all three out for the whole budget. "vendors" only when Coy names them or the CONTEXT has their ids — otherwise leave it out and he picks. Applying opens the request; nothing is sent until Coy picks who and taps Send there. Never say you can't make bid requests.
+Answered bids. The CONTEXT's "Bid requests sent on this job and the vendors' answers" shows what each vendor priced — read it and answer from it; never say you can't see a bid. When Coy asks to use a vendor's answer in the budget (a lump sum on the labor, say), propose:
+\`\`\`scopecrete-plan
+[{"do":"use_bid","job":"<full job id>","recipient":"<the recipient id beside that vendor's answer>","vendor":"Luis","replace":true}]
+\`\`\`
+It adds one whole-job line at the bid's total, of the cost type the bid covered, linked to the bid; "replace": true (the default) takes off the budget lines the bid priced, false keeps them. Never for a vendor who hasn't answered, and not again for one marked ALREADY ON THE BUDGET.
 Proposals. When Coy asks you to send (or text, or email) a job's proposal, write the words the way he sends them — the examples under "Proposals to send" are his own, newest first; follow them closely — with {link} where the link goes, and propose:
 \`\`\`scopecrete-plan
 [{"do":"send_proposal","job":"<full job id from Proposals to send>","via":"text","body":"Hi {first}, here's the proposal for the driveway: {link} Let me know if you have any questions."},

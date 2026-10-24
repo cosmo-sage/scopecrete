@@ -25,6 +25,9 @@
  */
 
 import { estimateBasis, isEstimate, unmark } from "@/lib/estimate-flag";
+import { bidHref, bidRef, markBid, unmarkBid } from "@/lib/bid-ref";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
@@ -425,9 +428,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                                     style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button>}
                                 </div>
                               )}
+                              {bidRef(l.description) && <BidRefLink description={l.description} />}
                               {isEstimate(l.description)
                                 ? <EstimateTag basis={estimateBasis(l.description)} onConfirm={() => void patchLine(l.id, { description: unmark(l.description) })} />
-                                : <LineNote key={l.id + (l.description ?? "")} value={l.description} name={l.name} onSave={(v) => void patchLine(l.id, { description: v })} />}
+                                : <LineNote key={l.id + (l.description ?? "")} value={unmarkBid(l.description)} name={l.name} onSave={(v) => { const ref = bidRef(l.description); void patchLine(l.id, { description: ref ? markBid(v, ref) : v }); }} />}
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
                             </td>
                             <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
@@ -808,6 +812,22 @@ function EstimateTag({ basis, onConfirm, wide }: { basis: string | null; onConfi
   );
 }
 
+/**
+ * The bid a line was priced from (src/lib/bid-ref.ts): "📄 Luis, answered Oct 23 ›", opening the
+ * request on the job's Summary. Never on the proposal.
+ */
+function BidRefLink({ description }: { description: string | null }) {
+  const params = useParams<{ jobId?: string }>();
+  const ref = bidRef(description);
+  if (!ref || !params?.jobId) return null;
+  return (
+    <Link href={bidHref(params.jobId, ref.request)} onClick={(e) => e.stopPropagation()} title="Open the bid this line was priced from"
+      style={{ display: "inline-block", fontSize: 10.5, color: T.chalk, fontWeight: 600, textDecoration: "underline", maxWidth: 260, ...clip }}>
+      📄 Bid · {ref.label} ›
+    </Link>
+  );
+}
+
 /** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
 function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
   const [v, setV] = useState(value ?? "");
@@ -895,7 +915,8 @@ function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen,
               <span style={{ display: "block", fontSize: F.xs, color: T.ink, ...clip }}>{l.name}</span>
               {isEstimate(l.description)
                 ? <span style={{ display: "block", fontSize: 10.5, color: T.hiviz, ...clip }}>ESTIMATE · {estimateBasis(l.description)} — open to confirm</span>
-                : l.description && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{l.description}</span>}
+                : unmarkBid(l.description) && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{unmarkBid(l.description)}</span>}
+              {bidRef(l.description) && <BidRefLink description={l.description} />}
               {/* A "needs …" note can be long (the tax one names the parish and where to fix it) — it wraps, never widens the page. */}
               <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums, ...(r.blocked.length ? { whiteSpace: "normal", overflowWrap: "anywhere" } : {}) }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}
@@ -1147,11 +1168,12 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
               <EstimateTag basis={estimateBasis(line.description)} onConfirm={() => onPatch({ description: unmark(line.description) })} wide />
             </div>
           )}
+          {bidRef(line.description) && <div className="mt-2" style={{ fontSize: 11.5 }}><BidRefLink description={line.description} /></div>}
           <label className="block mt-2"><span style={eyebrow}>Description · shows on the proposal</span>
-            <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none", overflow: "hidden" }}
+            <textarea defaultValue={unmarkBid(line.description) ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none", overflow: "hidden" }}
               ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; } }}
               onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; }}
-              onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>
+              onBlur={(e) => { const ref = bidRef(line.description); const v = e.target.value.trim() || null; if (v !== unmarkBid(line.description)) onPatch({ description: ref ? markBid(v, ref) : v }); }} /></label>
         </div>
 
         <div style={box}>

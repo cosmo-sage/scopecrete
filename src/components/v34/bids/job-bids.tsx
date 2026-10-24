@@ -18,6 +18,8 @@ import { Drawer } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { BidComposer, chip, type EditBid } from "@/components/v34/bids/bid-composer";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
+import { applyBidToBudget } from "@/lib/v34/bid-to-budget";
+import { bidCovers, bidLineName } from "@/lib/bid-ref";
 import { GROUP_LABEL, answeredBeforeEdit, budgetUnitCost, compareBids, hoursLabel, type PriceLine, type ShownScope } from "@/lib/bids";
 
 interface Rec {
@@ -175,6 +177,7 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
               {answeredBeforeEdit(x.answered_at, req.edited_at) && line("Answered before your last edit — their price is for the earlier version.", T.sun)}
               {x.answered_at && line(`Answered ${when(x.answered_at)}${x.sent_at ? ` (in ${hoursLabel((Date.parse(x.answered_at) - Date.parse(x.sent_at)) / 3_600_000)})` : ""}${x.answer_note ? ` — “${x.answer_note}”` : ""}`, T.green)}
               {x.outcome && line(x.outcome === "awarded" ? `✓ Awarded to them ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows they won it.` : `Marked not chosen ${x.outcome_at ? when(x.outcome_at) : ""} — their page shows it went another way.`, x.outcome === "awarded" ? T.green : T.ink3)}
+              {x.answered_at && !x.revoked_at && !x.price_lines?.length && total !== null && total > 0 && <UseBid jobId={jobId} req={req} rec={x} total={total} onDone={onChanged} />}
               {r && "error" in r && line(r.error, T.red)}
               {live[x.id] && line(live[x.id], live[x.id].startsWith("Delivered") ? T.green : live[x.id].startsWith("Text failed") || live[x.id].startsWith("Quo took") ? T.red : T.ink)}
               <div className="flex gap-1.5 flex-wrap mt-0.5">
@@ -191,6 +194,53 @@ function RequestSheet({ jobId, req, onClose, onChanged, onEdit }: { jobId: strin
         })}
       </div>
     </Drawer>
+  );
+}
+
+// ------------------------------------------------------------------ a one-number bid on the budget
+
+/**
+ * Use this bid (Coy, 2026-10-24: Luis's lump-sum labor on Wiggins): one whole-job line at the bid's
+ * total, linked back to this request, and — ticked to start — the lines the bid priced taken off the
+ * Proposed budget. Asked first; nothing is written before Yes.
+ */
+function UseBid({ jobId, req, rec, total, onDone }: { jobId: string; req: Req; rec: Rec; total: number; onDone: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [replace, setReplace] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const cover = bidCovers(req.scopes);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await applyBidToBudget({ jobId, requestId: req.id, recipientId: rec.id, vendor: rec.name, answeredAt: rec.answered_at, total, scopes: req.scopes, replace });
+      setMsg(r); if (r.ok) { setAsking(false); onDone(); }
+    } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) }); } finally { setBusy(false); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 rounded px-2 py-1.5" style={{ background: T.sunk }}>
+      {asking ? (
+        <>
+          <div style={{ fontSize: F.xs, color: T.ink, lineHeight: 1.45 }}>
+            Adds <b>{bidLineName(rec.name, cover.cost_type)}</b> at <b style={nums}>{money(total)}</b> to the budget&apos;s whole-job costs, linked to this bid.
+          </div>
+          <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
+            Take off the {cover.keys.length} line{cover.keys.length === 1 ? "" : "s"} it priced ({[...new Set(req.scopes.filter((s) => s.lines.some((l) => !l.supplied)).map((s) => s.title))].join(" · ")})
+          </label>
+          <div className="flex gap-1.5">
+            <button disabled={busy} onClick={() => void go()} style={{ ...chip(true, busy), background: T.hiviz, borderColor: T.hiviz, color: T.onHiviz }}>{busy ? "Putting it on…" : "Yes, use it"}</button>
+            <button onClick={() => setAsking(false)} style={chip(false)}>Not yet</button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span style={{ fontSize: F.xs, color: T.ink2, flex: 1, minWidth: 160 }}>One number — put it on the Proposed budget as one line in place of the lines it priced.</span>
+          <button onClick={() => { setMsg(null); setAsking(true); }} style={chip(true)}>Use this bid in the budget</button>
+        </div>
+      )}
+      {msg && <div style={{ fontSize: F.xs, color: msg.ok ? T.green : T.red }}>{msg.text}</div>}
+    </div>
   );
 }
 
@@ -311,7 +361,7 @@ function CompareBids({ jobId, req }: { jobId: string; req: Req }) {
       </div>
       <div className="flex items-center gap-2 flex-wrap px-3 py-2.5" style={{ borderTop: `1px solid ${T.hair}` }}>
         <span style={{ fontSize: F.sm, flex: 1, minWidth: 180 }}>
-          {chosen.length ? <>Your picks: <b style={nums}>{money(pickTotal)}</b> · {chosen.map((s) => `${s.title} → ${cmp.vendors[picks[s.key]].name}`).join(" · ")}</> : "No section priced by line yet — a one-number bid can't fill budget lines."}
+          {chosen.length ? <>Your picks: <b style={nums}>{money(pickTotal)}</b> · {chosen.map((s) => `${s.title} → ${cmp.vendors[picks[s.key]].name}`).join(" · ")}</> : "No section priced by line yet — use a one-number bid with Use this bid in the budget, under its vendor."}
         </span>
         {asking ? (
           <>

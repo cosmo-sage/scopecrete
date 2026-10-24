@@ -25,6 +25,7 @@ import { assemble, coldContext, scopeLines, type Assembled, type Block } from ".
 import { mentioned, searchTerms } from "./mentions";
 import { labelSpeakers } from "./transcript";
 import { formatProposalNumber } from "@/lib/proposal-number";
+import { bidAnswerLines, bidRef, type BidForDusty } from "@/lib/bid-ref";
 
 export type ContextRef =
   | { kind: "thread"; id: string }
@@ -432,6 +433,43 @@ async function vendorBlock(sb: Sb, orgId: string, contactId: string): Promise<Bl
   return { title: "Vendor (their page is open)", lines, trimmable: true };
 }
 
+/**
+ * The bid requests on a job and every vendor's answer (Coy, 2026-10-24: Luis priced the Wiggins labor
+ * and Dusty "can't see the bid request page itself"). Read under the session like the rest; the vendors'
+ * links (tokens) are never read.
+ */
+async function bidAnswersBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { data: rows, error } = await sb.from("bid_requests").select("id, created_at, price_mode, price_by, note, scopes")
+    .eq("org_id", orgId).eq("job_id", jobId).order("created_at", { ascending: false }).limit(12);
+  if (error || !rows?.length) return null;
+  const ids = (rows as Array<{ id: string }>).map((r) => r.id);
+  const [{ data: recs }, { data: lines }] = await Promise.all([
+    sb.from("bid_request_recipients").select("id, bid_request_id, contact_id, sent_at, opened_at, view_count, answered_at, price_total, price_lines, answer_note, revoked_at")
+      .eq("org_id", orgId).in("bid_request_id", ids),
+    sb.from("estimate_line_items").select("name, description, estimate:estimates!inner(job_id, status)")
+      .eq("org_id", orgId).eq("estimate.job_id", jobId).eq("estimate.status", "draft").ilike("description", "%[bid:%"),
+  ]);
+  const rs = (recs ?? []) as Array<Record<string, unknown>>;
+  const cids = [...new Set(rs.map((r) => r.contact_id as string))];
+  const { data: people } = cids.length ? await sb.from("contacts").select("id, name, company_name, phone").eq("org_id", orgId).in("id", cids) : { data: [] };
+  const who = new Map(((people ?? []) as Array<Record<string, unknown>>).map((p) => [p.id as string, (p.name as string | null)?.trim() || (p.company_name as string | null) || "Vendor"]));
+  const usedBy = new Map<string, string>();
+  for (const l of (lines ?? []) as Array<{ name: string; description: string | null }>) { const ref = bidRef(l.description); if (ref) usedBy.set(ref.recipient, l.name); }
+  const reqs: BidForDusty[] = (rows as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string, created_at: r.created_at as string, price_mode: r.price_mode as string | null, price_by: r.price_by as string | null, note: r.note as string | null,
+    scopes: (Array.isArray(r.scopes) ? r.scopes : []) as BidForDusty["scopes"],
+    recipients: rs.filter((x) => x.bid_request_id === r.id).map((x) => ({
+      id: x.id as string, name: who.get(x.contact_id as string) ?? "Vendor", sent_at: x.sent_at as string | null, opened_at: x.opened_at as string | null,
+      view_count: x.view_count as number | null, answered_at: x.answered_at as string | null, price_total: x.price_total === null ? null : Number(x.price_total),
+      price_lines: (x.price_lines as BidForDusty["recipients"][number]["price_lines"]) ?? null, answer_note: x.answer_note as string | null, revoked_at: x.revoked_at as string | null,
+    })),
+  }));
+  return { title: "Bid requests sent on this job and the vendors' answers (Coy sees them on the job's Summary → Bids)", lines: [
+    ...bidAnswerLines(reqs, usedBy),
+    "To put an answered bid on the budget, use a use_bid step with the recipient id above: it adds one whole-job line at the bid's total, linked to the bid, and (replace: true) takes off the budget lines the bid priced. Coy applies it.",
+  ] };
+}
+
 async function settingsAndOverhead(sb: Sb, orgId: string) {
   const [money, { data: oh }] = await Promise.all([
     moneySettings(sb, orgId),
@@ -461,8 +499,8 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid, ocr, book, bidText, specs, calls] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId),
-    specsBlock(sb, orgId, jobId), callsBlock(sb, orgId, job.contact_id as string | null, job.customer_id as string | null)]);
+  const [bud, plans, prop, mail, bid, ocr, book, bidText, specs, calls, answers] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId),
+    specsBlock(sb, orgId, jobId), callsBlock(sb, orgId, job.contact_id as string | null, job.customer_id as string | null), bidAnswersBlock(sb, orgId, jobId).catch(() => null)]);
   // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
   const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
     const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
@@ -485,6 +523,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     { title: "Areas — refs for a budget plan (\"job\" = whole job)", lines: areaRefs },
     ...(bud ? [bud] : []),
+    ...(answers ? [answers] : []),
     ...(book ? [book] : []),
     ...(plans ? [plans] : []),
     ...(ocr ? [ocr] : []),

@@ -13,6 +13,7 @@ const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 import { archiveNow } from "@/components/v34/archive-actions";
 import { expectMessage } from "@/lib/v34/live-threads";
 import { sendProposal } from "@/lib/v34/send-proposal";
+import { applyBidToBudget } from "@/lib/v34/bid-to-budget";
 import { forwardBody, forwardSubject, replySubject, replyTargets, type MailRow } from "@/lib/email-client";
 
 export interface PlanLookup {
@@ -93,7 +94,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12, bid_request: 12 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12, bid_request: 12, use_bid: 12 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -449,6 +450,19 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
           job: a.job, seed: { sections: a.areas, groups: a.groups, items: a.items }, vendors: a.vendors, from: "Started by Dusty" } }));
         if (typeof window !== "undefined" && window.innerWidth < 1024) window.dispatchEvent(new Event("sc:dusty-close"));
         out.push({ ok: true, text: "Opened the bid request — pick who gets it and tap Send" });
+        continue;
+      }
+      if (a.do === "use_bid") {
+        // The vendor's answer read again under Coy's session, then the request sheet's own Use this bid.
+        const r = await call(`/api/bid-requests?job=${a.job}`, "GET");
+        type Rec = { id: string; name: string; answered_at: string | null; price_total: number | null; revoked_at: string | null };
+        const req = ((r.requests ?? []) as Array<{ id: string; scopes: Array<{ lines: Array<{ key: string; supplied: boolean }> }>; recipients: Rec[] }>)
+          .find((q) => q.recipients.some((x) => x.id === a.recipient));
+        const rec = req?.recipients.find((x) => x.id === a.recipient);
+        if (!req || !rec) { out.push({ ok: false, text: "Couldn't find that vendor's bid on the job." }); continue; }
+        if (!rec.answered_at || rec.price_total === null) { out.push({ ok: false, text: `${rec.name} hasn't sent a total yet — nothing changed.` }); continue; }
+        out.push(await applyBidToBudget({ jobId: a.job, requestId: req.id, recipientId: rec.id, vendor: rec.name, answeredAt: rec.answered_at,
+          total: Number(rec.price_total), scopes: Array.isArray(req.scopes) ? req.scopes : [], replace: a.replace }));
         continue;
       }
       if (a.do === "send_proposal") {

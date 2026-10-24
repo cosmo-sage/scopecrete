@@ -4,7 +4,7 @@
  * customizable per user"). The layout keys a person hasn't set themselves come from the org's;
  * one they set is theirs. Tested in tests/layout.test.mjs.
  */
-export const LAYOUT_KEYS = ["shelves", "spaces_pins", "spaces_rail", "spaces_collections", "spaces_col_members", "spaces_col_shelves", "space_layouts"] as const;
+export const LAYOUT_KEYS = ["shelves", "spaces_pins", "spaces_rail", "spaces_collections", "spaces_col_members", "spaces_col_shelves", "space_layouts", "email_templates"] as const;
 
 export const isLayoutKey = (k: string): boolean => (LAYOUT_KEYS as readonly string[]).includes(k);
 

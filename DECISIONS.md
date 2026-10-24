@@ -1272,6 +1272,17 @@ that, and it replaces his Hermes agent. The §2a shape, for email:
     quarantined reply on its thread came in filed in the same conversation
     and its held file went to waiting; a stranger saw no emails and no
     conversations.
+  - **Email templates are yours to edit (Coy, 2026-10-24: "Where do I find my email Templates to edit?
+    And how do I create a template from an email I've drafted while in the editor?"; no migration).** The
+    four above are now only the starters. **Settings → Templates → Email templates** (under the contracts
+    and warranties; `email-templates.tsx`) lists them: + New, change a template's name, its line in the
+    menu, its subject and words, Delete, and Put the starters back. The editor's **Templates ▾** lists
+    the account's own, then **+ Save this email as a template** (a name, then Save: the subject and body
+    written so far, their first name turned into {first} and the job's title into {job} —
+    `templateFromDraft()`) and **Edit templates ›**. Kept as `user_preferences.prefs.email_templates`
+    (`cleanEmailTemplates()` / `emailTemplatesOf()` in `src/lib/email-client.ts`, tested in
+    `tests/email-templates.test.mjs`: 25 at most, 2,000 characters of words each), a layout key, so an
+    owner's become the company's starting set (114) and a teammate's changes are theirs alone.
   - **@email in any thread's text box (Coy, 2026-10-20, after Google Docs' email drafts: "writing emails just
     by typing @email and then it makes the to: address rows with drop down selections that pull from both
     database emails … and possibly device contacts"; no migration).** Typing **@email** (or @mail) as the last

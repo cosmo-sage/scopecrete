@@ -16,7 +16,7 @@ import { isLayoutKey, withOrgLayout } from "@/lib/v34/layout";
  */
 
 export const dynamic = "force-dynamic";
-const KEYS = new Set(["menus", "home", "pricebook_cols", "theme", "customers_view", "dusty_font", "thread_font", "activity_line", "activity_line_phone", "header_logo", "thread_colors", "rail_icons", "menu_colors", "map_provider", "new_nav", "spaces_folded", "shelves", "spaces_pins", "spaces_rail", "spaces_collections", "spaces_col_members", "spaces_col_shelves", "space_layouts", "section_groups", "tours_seen", "dusty_note", "admin_setup_skip"]);
+const KEYS = new Set(["menus", "home", "pricebook_cols", "theme", "customers_view", "dusty_font", "thread_font", "activity_line", "activity_line_phone", "header_logo", "thread_colors", "rail_icons", "menu_colors", "map_provider", "new_nav", "spaces_folded", "shelves", "spaces_pins", "spaces_rail", "spaces_collections", "spaces_col_members", "spaces_col_shelves", "space_layouts", "section_groups", "tours_seen", "dusty_note", "admin_setup_skip", "email_templates"]);
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest) {
   let b: { key?: unknown; value?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   if (typeof b.key !== "string" || !KEYS.has(b.key)) return bad("Unknown setting.");
-  if (JSON.stringify(b.value ?? null).length > 20_000) return bad("That setting is too big.");
+  if (JSON.stringify(b.value ?? null).length > (b.key === "email_templates" ? 60_000 : 20_000)) return bad("That setting is too big.");
   const { data: cur } = await supabase.from("user_preferences").select("prefs").eq("org_id", orgId).eq("user_id", userId).maybeSingle();
   const prefs = { ...((cur?.prefs as Record<string, unknown>) ?? {}), [b.key]: b.value ?? null };
   const { error } = await supabase.from("user_preferences")

@@ -18,7 +18,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { k: "lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app", href: `${SETTINGS_HOME}/lines` },
   { k: "cost-book", label: "Cost book", note: "Margin, O.H., day minimum and parish tax · project types · importing prices", href: `${SETTINGS_HOME}/cost-book` },
   { k: "vendors", label: "Vendors", note: "Vendor kinds and the trades under each — rename, reorder, add, so Dusty finds the right vendor", href: `${SETTINGS_HOME}/vendors` },
-  { k: "templates", label: "Templates", note: "Your contracts and warranties for proposals · edit them with Dusty", href: `${SETTINGS_HOME}/templates` },
+  { k: "templates", label: "Templates", note: "Contracts and warranties for proposals, and your email templates", href: `${SETTINGS_HOME}/templates` },
   { k: "appearance", label: "Appearance", note: "The color scheme — some change the typeface too", href: `${SETTINGS_HOME}/appearance`, field: true },
   { k: "maps", label: "Maps", note: "Google Maps or Mapbox on the Map page", href: `${SETTINGS_HOME}/maps` },
   { k: "ai", label: "AI", note: "Dusty's thought line, on a phone and on a desktop", href: `${SETTINGS_HOME}/ai` },

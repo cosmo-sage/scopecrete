@@ -252,6 +252,53 @@ export function fillTemplate(t: string, v: { first?: string | null; job?: string
   return t.replace(/\{first\}/g, v.first?.trim() || "there").replace(/\{job\}/g, v.job?.trim() || "the job").replace(/\{date\}/g, v.date?.trim() || "[date]");
 }
 
+/**
+ * Email templates are editable (Coy, 2026-10-24: "Where do I find my email Templates to edit? And how
+ * do I create a template from an email I've drafted while in the editor?"). Kept on the account as
+ * `user_preferences.prefs.email_templates` and shared from the org's layout like the shelves, so a
+ * teammate starts with the owner's; never saved means the four above.
+ */
+export const MAX_EMAIL_TEMPLATES = 25;
+const cut = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : "");
+export function cleanEmailTemplates(v: unknown): MailTemplate[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: MailTemplate[] = [];
+  const seen = new Set<string>();
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const label = cut(o.label, 60).trim();
+    const body = cut(o.body, 2000);
+    if (!label || !body.trim()) continue;
+    let k = cut(o.k, 40).trim() || label.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "t";
+    while (seen.has(k)) k = `${k}-2`.slice(-40);
+    seen.add(k);
+    out.push({ k, label, sub: cut(o.sub, 100).trim(), subject: cut(o.subject, 200), body });
+    if (out.length >= MAX_EMAIL_TEMPLATES) break;
+  }
+  return out;
+}
+/** The account's templates, or the four starters when none were ever saved. */
+export const emailTemplatesOf = (v: unknown): MailTemplate[] => cleanEmailTemplates(v) ?? TEMPLATES;
+
+/**
+ * A template from an email being written: the recipient's first name becomes {first} and the job's
+ * title {job}, wherever they appear as whole words, so it fills in for the next person and job.
+ */
+export function templateFromDraft(v: { label: string; subject: string; body: string; first?: string | null; job?: string | null }): MailTemplate {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const swap = (t: string) => {
+    let r = t;
+    const job = v.job?.trim();
+    if (job && job.length > 2) r = r.replace(new RegExp(esc(job), "gi"), "{job}");
+    const first = v.first?.trim();
+    if (first && first.length > 1) r = r.replace(new RegExp(`\\b${esc(first)}\\b`, "g"), "{first}");
+    return r;
+  };
+  const label = v.label.trim().slice(0, 60) || "My template";
+  return { k: `own-${Date.now().toString(36)}`, label, sub: "", subject: swap(v.subject).slice(0, 200), body: swap(v.body.trim()).slice(0, 2000) };
+}
+
 /** The sign-off under every message: name · org · phone, whichever are known. */
 export function signatureOf(v: { name?: string | null; org?: string | null; phone?: string | null }): string {
   const parts = [v.name, v.org, v.phone].map((x) => x?.trim()).filter(Boolean);

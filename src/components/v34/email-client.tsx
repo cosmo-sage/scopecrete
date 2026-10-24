@@ -24,11 +24,12 @@ import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
+import { usePref } from "@/lib/v34/prefs";
 import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
-  MAIL_TABS, TEMPLATES, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
+  MAIL_TABS, emailTemplatesOf, templateFromDraft, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
   replySubject, replyTargets, vendorFromEmail, writerOf, type ComposeMode, type Conversation, type MailRow, type MailTab,
 } from "@/lib/email-client";
 
@@ -838,6 +839,9 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const [attach, setAttach] = useState(false);
   const [tpl, setTpl] = useState(false);
+  const [savedTpls, setSavedTpls] = usePref<unknown>("email_templates", null);
+  const templates = emailTemplatesOf(savedTpls);
+  const [tplName, setTplName] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -847,12 +851,21 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
   const lastIn = [...messages].reverse().find((m) => m.direction !== "out");
   const who = lastIn ? writerOf(lastIn).name : null;
   const applyTemplate = (k: string) => {
-    const t = TEMPLATES.find((x) => x.k === k);
+    const t = templates.find((x) => x.k === k);
     if (!t) return;
     const v = { first: firstName(who), job: filing.job_title ?? null };
     if (!subject.trim() || mode === "new") setSubject(fillTemplate(t.subject, v));
     setBody((b) => (b.trim() ? `${fillTemplate(t.body, v)}\n\n${b}` : fillTemplate(t.body, v)));
     setTpl(false);
+  };
+  // Save what is written as a template (the recipient's first name and the job become {first} / {job}).
+  const saveAsTemplate = () => {
+    const label = (tplName ?? "").trim();
+    if (!label || !body.trim()) return;
+    const t = templateFromDraft({ label, subject, body, first: firstName(toName ?? who), job: filing.job_title ?? null });
+    setSavedTpls([...templates.filter((x) => x.label.toLowerCase() !== label.toLowerCase()), t]);
+    setTplName(null); setTpl(false);
+    setNote(`Saved as the template “${label}”. Edit it in Settings → Templates.`);
   };
   const dustyDraft = async () => {
     if (!convKeyForDusty) return;
@@ -940,11 +953,28 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
         <button style={btn(true, ready)} disabled={!ready} onClick={() => setConfirm(true)}>Send</button>
         {tpl && (
           <div style={{ position: "absolute", left: 0, bottom: "100%", zIndex: 20, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 4, boxShadow: "0 6px 18px rgba(0,0,0,.15)", minWidth: 240 }}>
-            {TEMPLATES.map((t) => (
+            {templates.map((t) => (
               <button key={t.k} onClick={() => applyTemplate(t.k)} className="w-full text-left" style={{ padding: "8px 10px", cursor: "pointer", background: "none", borderBottom: `1px solid ${T.hairSoft}`, display: "block" }}>
-                <div style={{ fontSize: F.sm, fontWeight: 600 }}>{t.label}</div><div style={{ fontSize: 11, color: T.ink3 }}>{t.sub}</div>
+                <div style={{ fontSize: F.sm, fontWeight: 600 }}>{t.label}</div>{t.sub && <div style={{ fontSize: 11, color: T.ink3 }}>{t.sub}</div>}
               </button>
             ))}
+            {tplName === null ? (
+              <button onClick={() => setTplName(subject.trim().slice(0, 60))} disabled={!body.trim()} className="w-full text-left"
+                title={body.trim() ? undefined : "Write the email first"}
+                style={{ padding: "8px 10px", cursor: body.trim() ? "pointer" : "default", background: "none", borderBottom: `1px solid ${T.hairSoft}`, display: "block", fontSize: F.sm, fontWeight: 600, color: body.trim() ? T.chalk : T.ink3 }}>
+                + Save this email as a template
+              </button>
+            ) : (
+              <div style={{ padding: "8px 10px", borderBottom: `1px solid ${T.hairSoft}` }}>
+                <div style={{ fontSize: 11, color: T.ink3, marginBottom: 4 }}>Name it. {toName || who ? "Their first name" : "A first name"} and the job become blanks that fill in next time.</div>
+                <div className="flex gap-1.5">
+                  <input autoFocus value={tplName} onChange={(e) => setTplName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveAsTemplate(); if (e.key === "Escape") setTplName(null); }}
+                    placeholder="Template name" aria-label="Template name" style={{ ...field, flex: 1, minWidth: 0 }} />
+                  <button style={btn(true, !!tplName.trim())} disabled={!tplName.trim()} onClick={saveAsTemplate}>Save</button>
+                </div>
+              </div>
+            )}
+            <Link href="/dashboard/settings/templates#email" style={{ display: "block", padding: "8px 10px", fontSize: 12, color: T.ink2 }}>Edit templates ›</Link>
           </div>
         )}
       </div>

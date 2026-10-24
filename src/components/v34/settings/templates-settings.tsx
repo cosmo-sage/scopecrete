@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp } from "@/lib/v34/tokens";
 import { SettingsBlock, SettingsTitle } from "@/components/v34/settings/parts";
+import { EmailTemplatesBlock } from "@/components/v34/settings/email-templates";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { setDustyUse } from "@/lib/v34/dusty-live";
 import { USE_ASK } from "@/lib/dusty/use-block";
@@ -108,7 +109,7 @@ export function TemplatesSettings() {
 
   return (
     <div>
-      <SettingsTitle title="Templates" note="Your contracts and warranties. A proposal loads one by its project type; proposals already made keep their own copy." />
+      <SettingsTitle title="Templates" note="Your contracts and warranties, and your email templates. A proposal loads a contract or warranty by its project type; proposals already made keep their own copy." />
       <div className="flex gap-3 flex-wrap items-start">
         <div style={{ flex: "1 1 220px", maxWidth: 300 }}>
           {groups.map(({ k, items }) => (
@@ -187,6 +188,7 @@ export function TemplatesSettings() {
           )}
         </div>
       </div>
+      <EmailTemplatesBlock />
     </div>
   );
 }

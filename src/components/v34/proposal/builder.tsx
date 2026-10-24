@@ -48,8 +48,12 @@ export function PageColumn({ pages, openId, onOpen, editable, change, onAdd, onS
             ) : (
               <span className="flex-1 truncate" style={{ fontSize: 12.5, color: p.off ? T.ink3 : T.ink, fontWeight: open ? 600 : 400 }}>{p.label || "Untitled"}</span>
             )}
-            {p.off && <span style={tag(T.card, T.ink3)}>Off</span>}
             {p.isNew && !p.off && <span style={tag(T.hivizDim, T.hivizText)}>New</span>}
+            {/* Each page switched on or off from its row (Coy, 2026-10-24: "toggle on/off pages"). */}
+            {editable ? (
+              <MiniSwitch on={!p.off} label={`${p.off ? "Switch on" : "Switch off"} ${p.label || "this page"}`}
+                onChange={(on) => change(on ? `Switched on "${p.label}"` : `Switched off "${p.label}"`, pages, patchPage(pages, p.id, { off: on ? undefined : true }))} />
+            ) : p.off && <span style={tag(T.card, T.ink3)}>Off</span>}
             {editable && (
               <button aria-label={`More for ${p.label}`} onClick={(e) => { e.stopPropagation(); setMenu(menu === p.id ? null : p.id); }}
                 className="opacity-40 group-hover:opacity-100" style={{ width: 22, height: 22, color: T.ink2, opacity: open || menu === p.id ? 1 : undefined }}>⋯</button>
@@ -156,9 +160,22 @@ export function AddPageMenu({ after, pages, hasPhotos, hasPdfs, onPick, onClose,
   );
 }
 
-/** Over the open page: its title (renames it), where it comes from, and the switched-off banner. */
-export function EditorHead({ page, editable, who, onRename, onSwitchOn }: {
-  page: ProposalPage; editable: boolean; who: string; onRename: (s: string) => void; onSwitchOn: () => void;
+/** A small on/off switch for the builder's chrome (the document has its own). */
+export function MiniSwitch({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} title={label}
+      onClick={(e) => { e.stopPropagation(); onChange(!on); }}
+      className="shrink-0" style={{ width: 26, height: 15, borderRadius: 999, background: on ? T.green : T.hair, position: "relative", border: 0, padding: 0, cursor: "pointer" }}>
+      <span style={{ position: "absolute", top: 2, left: on ? 13 : 2, width: 11, height: 11, borderRadius: 999, background: "#fff", transition: "left .12s" }} />
+    </button>
+  );
+}
+
+/** Over the open page: its title (renames it), where it comes from, its on/off switch, the sections
+ *  on it that switch on and off by themselves, and the switched-off banner. */
+export function EditorHead({ page, editable, who, onRename, onSwitchOn, onSwitchOff, sections, onPart }: {
+  page: ProposalPage; editable: boolean; who: string; onRename: (s: string) => void; onSwitchOn: () => void; onSwitchOff: () => void;
+  sections: Array<{ key: string; label: string; off: boolean }>; onPart: (key: string, on: boolean) => void;
 }) {
   const [v, setV] = useState(page.label);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the box follows a rename made elsewhere
@@ -173,7 +190,25 @@ export function EditorHead({ page, editable, who, onRename, onSwitchOn }: {
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setV(page.label); (e.target as HTMLInputElement).blur(); } }}
           className="flex-1 sc-page-title-input" style={{ minWidth: 0, background: "transparent", border: 0, borderBottom: "1px dashed transparent", fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".16em", textTransform: "uppercase", color: "#7B8590", padding: "2px 0" }} />
         <span style={{ ...tag(bg, fg), fontSize: 10.5 }}>{src.label}</span>
+        {editable && (
+          <label className="flex items-center gap-1.5" style={{ fontSize: 11.5, color: T.ink2 }}>
+            {page.off ? "Off" : "On"}
+            <MiniSwitch on={!page.off} label={page.off ? "Switch this page on" : "Switch this page off"} onChange={(on) => (on ? onSwitchOn() : onSwitchOff())} />
+          </label>
+        )}
       </div>
+      {editable && sections.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: T.ink3 }}>On this page:</span>
+          {sections.map((x) => (
+            <button key={x.key} type="button" role="switch" aria-checked={!x.off} onClick={() => onPart(x.key, x.off)}
+              title={x.off ? `${x.label} is hidden — tap to show it` : `Tap to hide ${x.label.toLowerCase()} from the customer`}
+              style={{ fontSize: 11.5, borderRadius: 999, padding: "2px 9px", border: `1px solid ${x.off ? T.hair : T.green}`, background: x.off ? "transparent" : T.greenDim, color: x.off ? T.ink3 : T.green, textDecoration: x.off ? "line-through" : "none", cursor: "pointer" }}>
+              {x.off ? "○" : "✓"} {x.label}
+            </button>
+          ))}
+        </div>
+      )}
       {page.off && (
         <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 8, padding: "8px 12px", background: T.sunk, borderRadius: 4, fontSize: 12.5, color: T.ink2 }}>
           <span className="flex-1">Switched off — {who} won&apos;t see this page. It stays here for next time.</span>

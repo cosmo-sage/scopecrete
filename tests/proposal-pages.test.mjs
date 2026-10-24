@@ -110,3 +110,20 @@ test("the camera stamp", () => {
   assert.equal(stampText(null, null, null), null);
   assert.equal(stampText("2026-10-14T15:00:00Z", null, null), "Oct 14, 2026");
 });
+
+import { cleanPages as cleanP, partsOff, partOff, togglePart, PARTS } from "../src/lib/proposal-pages.ts";
+
+test("a page's sections switch off on their own, and only known ones are kept", () => {
+  const pages = cleanP([{ id: "p1", kind: "scope", label: "Scope", parts_off: ["intro", "bogus", "intro", 3] }, { id: "p2", kind: "title", label: "Title" }]);
+  assert.deepEqual(pages[0].parts_off, ["intro"]);
+  assert.equal(partOff(pages[0], "intro"), true);
+  assert.equal(partOff(pages[0], "areas"), false);
+  // The title page follows the old cover / header switches until it has its own list.
+  assert.deepEqual(partsOff(pages[1], { cover: true, scope: true }), ["cover"]);
+  const on = togglePart(pages, "p2", "cover", true, { cover: true });
+  assert.deepEqual(on[1].parts_off, []);
+  assert.equal(partOff(on[1], "cover", { cover: true }), false);
+  const off = togglePart(on, "p2", "band", false);
+  assert.deepEqual(off[1].parts_off, ["band"]);
+  assert.ok(PARTS.glance.some((x) => x.key === "price"));
+});

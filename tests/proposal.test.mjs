@@ -59,11 +59,14 @@ test("tax folded into the groups gives the same total", () => {
   near(folded.groups.find((g) => g.key === "a1").sell, apronShown + 119);
 });
 
-test("a hidden line or group drops out of the total; a hidden price still counts", () => {
+test("a hidden line keeps its price in the total; a hidden group drops out; a hidden price still counts", () => {
   const full = price({ show_tax_line: true });
   const noSeal = price({ show_tax_line: true, linesOff: { seal: true } });
-  const sealSell = full.groups.flatMap((g) => g.items).find((i) => i.id === "seal").sell;
-  near(noSeal.total, full.total - sealSell);
+  near(noSeal.total, full.total);
+  near(noSeal.groups.find((g) => g.key === "a2").sell, full.groups.find((g) => g.key === "a2").sell);
+  assert.equal(noSeal.groups.flatMap((g) => g.items).find((i) => i.id === "seal").hidden, true);
+  const noMix = price({ show_tax_line: true, linesOff: { mix: true } });
+  near(noMix.tax, full.tax);
   const noWalk = price({ show_tax_line: true, groupsOff: { a2: true } });
   near(noWalk.total, full.total - full.groups.find((g) => g.key === "a2").sell);
   const priceHidden = price({ show_tax_line: true, pricesOff: { a1: true, lab: true } });
@@ -138,7 +141,7 @@ test("fixing the last draw keeps it a % when the others are %, so a new price st
 
 test("with tax folded in, the lines still add up to their group", () => {
   const p = price({ show_tax_line: false });
-  for (const g of p.groups) near(g.items.filter((i) => !i.addon && !i.hidden).reduce((a, i) => a + i.sell, 0), g.sell, 0.001);
+  for (const g of p.groups) near(g.items.filter((i) => !i.addon).reduce((a, i) => a + i.sell, 0), g.sell, 0.001);
 });
 
 test("every line an add-on: no price, and each add-on named so it can be put back", () => {

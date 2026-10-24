@@ -31,7 +31,7 @@ import Link from "next/link";
 import { ProposalPreview, type PropLink } from "./preview";
 import { formatProposalNumber, type NumberBase } from "@/lib/proposal-number";
 import {
-  insertAfter, newPageId, pagesOf, withoutNew, patchPage, sellOf, sendCheck, stampText,
+  insertAfter, newPageId, pagesOf, withoutNew, patchPage, sellOf, sendCheck, stampText, PARTS, partOff, togglePart,
   type ProposalPage, type SendFinding,
 } from "@/lib/proposal-pages";
 import { AddPageMenu, EditorHead, Modal, PageColumn, PullIn, SendCheck, UndoToast, pageFromPick, type AddPick } from "./builder";
@@ -663,7 +663,10 @@ export function Proposal({ jobId }: { jobId: string }) {
             <div className="sc-no-print">
               {openPage && <EditorHead page={openPage} editable={editable} who={vm.customer.person ?? vm.customer.name ?? "The customer"}
                 onRename={(v) => pagesChange(`Renamed "${openPage.label}"`, pages, patchPage(pages, openPage.id, { label: v.slice(0, 80) }))}
-                onSwitchOn={() => pagesChange(`Switched on "${openPage.label}"`, pages, patchPage(pages, openPage.id, { off: undefined }))} />}
+                onSwitchOn={() => pagesChange(`Switched on "${openPage.label}"`, pages, patchPage(pages, openPage.id, { off: undefined }))}
+                onSwitchOff={() => pagesChange(`Switched off "${openPage.label}"`, pages, patchPage(pages, openPage.id, { off: true }))}
+                sections={(PARTS[openPage.kind] ?? []).map((x) => ({ ...x, off: partOff(openPage, x.key, d.off) }))}
+                onPart={(key, on) => pagesChange(`${on ? "Showed" : "Hid"} ${(PARTS[openPage.kind] ?? []).find((x) => x.key === key)?.label ?? key} on "${openPage.label}"`, pages, togglePart(pages, openPage.id, key, on, d.off))} />}
               <ProposalDocument vm={vm} edits={edits} narrow={!wide} only={open ?? undefined} />
               {open && (() => {
                 const list = editable ? pages : shownPages, i = list.findIndex((x) => x.id === open);

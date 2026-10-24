@@ -4273,7 +4273,9 @@ expected start date per quoted job before it means anything. Add the field.
   lists (`sc_shared_bid_asset()`), signed for an hour. **Where the answers
   show:** the job's Summary (**Bids**, each vendor answered / opened / sent,
   cheapest first) and the vendor's page (first tab **Bid requests** — stats,
-  each request, **Their rates**). Links point at scopecrete.ai
+  each request, **Their rates**). **The vendor page's header has no Send a bid request (Coy, 2026-10-24,
+  toolbar note):** the Bid requests tab lists every request sent to them, each opening it on the job's Summary
+  (`?bid=`), with **+ New bid request** on the list's header, which opens the composer with them picked. Links point at scopecrete.ai
   (`publicOrigin()`); the code is on master, so they open.
   Rehearsed (rolled back) on the live data: a request and a vendor's link
   made; another org's or a made-up vendor refused; anon read the scopes by

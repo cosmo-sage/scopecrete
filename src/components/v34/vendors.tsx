@@ -523,7 +523,6 @@ export function VendorPage({ id }: { id: string }) {
       { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
     ],
     actions: [
-      { label: "Send a bid request", primary: true, onClick: () => setComposing(true) },
       { label: "+ Receipt or quote", onClick: () => setReceipt(true) },
       ...(v?.website ? [{ label: "Website ↗", onClick: () => { window.open(v.website!, "_blank", "noopener,noreferrer"); } }] : []),
       { label: "App access", onClick: () => {
@@ -598,16 +597,16 @@ function VendorBids({ rows, stats, jobs, missing, onSend }: { rows: Array<BidRec
       <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
           <h3 style={{ ...panelTitle, flex: 1 }}>Bid requests</h3>
-          <button onClick={onSend} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Send a bid request</button>
+          <button onClick={onSend} className="rounded px-3 py-1.5" style={{ fontSize: F.sm, fontWeight: 600, background: T.hiviz, color: T.onHiviz, cursor: "pointer" }}>+ New bid request</button>
         </div>
-        {rows.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None yet. Send one from here, from Vendors (tick several), or from a job&apos;s Summary.</div>
+        {rows.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None sent yet. + New bid request starts one to them; you can also send from Vendors (tick several), a job&apos;s Summary or a cost item on the Budget.</div>
           : rows.map((r) => {
             const st = r.revoked_at ? "Link turned off" : r.answered_at ? `Answered ${when(r.answered_at)}${r.sent_at ? ` · in ${hoursLabel((Date.parse(r.answered_at) - Date.parse(r.sent_at)) / 3_600_000)}` : ""}`
               : r.sent_at ? `Sent ${when(r.sent_at)}${r.opened_at ? ` · opened${r.view_count > 1 ? ` ${r.view_count}×` : ""}` : " · not opened"} · no price yet` : "Not sent";
             return (
               <div key={r.id} className="px-3 py-2 flex items-start gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Link href={`/dashboard/scope/${r.req.job_id}/summary`} style={{ fontWeight: 600, fontSize: F.sm, color: T.ink }}>{r.req.job_title ?? "Job"}</Link>
+                  <Link href={`/dashboard/scope/${r.req.job_id}/summary?bid=${r.req.id}`} style={{ fontWeight: 600, fontSize: F.sm, color: T.ink }}>{r.req.job_title ?? "Job"}</Link>
                   <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{r.req.scopes.map((s) => `${s.title}${s.size ? ` · ${s.size}` : ""}`).join(" · ")}</div>
                   <div style={{ fontSize: F.xs, color: r.answered_at ? T.green : r.revoked_at ? T.ink3 : T.hivizText }}>{st}</div>
                   {r.answer_note && <div style={{ fontSize: F.xs, color: T.ink2 }}>“{r.answer_note}”</div>}

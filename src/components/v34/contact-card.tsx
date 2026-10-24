@@ -8,6 +8,7 @@
  * adds a number or an email, and sets the address — through the same routes
  * as before (/api/contacts/[id]/name, /phones, /emails, /address).
  */
+import { CameraLinkCard } from "@/components/v34/camera/camera-link-card";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -134,6 +135,12 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
       {/* Their appointments — their own and those on their jobs (migration 110). */}
       <div style={{ marginTop: 16 }}>
         <AppointmentsCard contactId={c.id} about={c.name} address={c.address ?? null}
+          card={{ background: T.card, border: `1px solid ${T.hair}`, borderRadius: 12 }} />
+      </div>
+
+      {/* A camera link for them alone — their shots land in their Files (migration 128). */}
+      <div style={{ marginTop: 16 }}>
+        <CameraLinkCard contactId={c.id} people={[{ id: c.id, name: c.name }]}
           card={{ background: T.card, border: `1px solid ${T.hair}`, borderRadius: 12 }} />
       </div>
 

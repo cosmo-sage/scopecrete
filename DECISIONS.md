@@ -668,7 +668,7 @@ itself — `platform_admins` (084) — not an org's owner.
   of it on their own): the people list (`sc_org_people`), files and their
   `storage.objects` rows all answer for the viewed company. Not seen: a
   signed photo or plan link, which the Storage API makes in its own
-  transaction — tried in the app; if it comes up empty, that is why. **It came up empty (2026-10-23, Gulfline's Files: names, no pictures):** migration 125 (written, waiting on Coy's word) adds `sc_admin_view_org()` and a SELECT-only policy on `storage.objects` (job-files, message-media, call-audio, org-branding) for the company an admin has an open view of, so the Storage API can sign its photos and plans; no write is widened. Who is a platform admin is
+  transaction — tried in the app; if it comes up empty, that is why. **It came up empty (2026-10-23, Gulfline's Files: names, no pictures):** migration 125 (applied 2026-10-24 on Coy's "apply 125" — checked after: `sc_admin_view_org()` SECURITY DEFINER, authenticated may run it and anon not, `admin_view_objects_select` SELECT only for authenticated, no other storage policy changed) adds `sc_admin_view_org()` and a SELECT-only policy on `storage.objects` (job-files, message-media, call-audio, org-branding) for the company an admin has an open view of, so the Storage API can sign its photos and plans; no write is widened. Who is a platform admin is
   `platform_admins`: admin@saccobuilt.com and coysacco@gmail.com (084).
 - Rehearsed (rolled back) on the live data: every read as Coy; a signed-in
   stranger refused on each; nobody can run `sc_admin_audit` or read

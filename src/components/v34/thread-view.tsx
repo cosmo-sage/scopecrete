@@ -28,6 +28,7 @@ import { useLiveThreads } from "@/lib/v34/live-threads";
 import { useLiveCalls } from "@/lib/v34/alerts-live";
 import { liveCallFor } from "@/lib/alerts";
 import { usePref } from "@/lib/v34/prefs";
+import { cleanFavorites, isFavorite, toggleFavorite } from "@/lib/v34/spaces";
 import { TEXT_SIZES, textSize } from "@/lib/v34/text-size";
 import { LiveCallBadge, LiveDot } from "@/components/v34/incoming-alerts";
 
@@ -95,6 +96,9 @@ export function ThreadView({ contactId, embedded = false }: {
   const moreRef = useDismiss(more, () => setMore(false));
   // The conversation's text size, like Dusty's chat (Coy, 2026-10-09), saved to the account.
   const [sizeKey, setSizeKey] = usePref<string>("thread_font", "m");
+  // Favorites across the top of the Threads Work Space's drawer (Coy, 2026-10-24).
+  const [favRaw, setFavRaw] = usePref<unknown>("thread_favorites", []);
+  const favs = cleanFavorites(favRaw);
   const size = textSize(sizeKey);
   const liveCalls = useLiveCalls();
 
@@ -350,6 +354,8 @@ export function ThreadView({ contactId, embedded = false }: {
             notesOpen={notesOpen} onNotes={() => setNotesOpen((v) => !v)} nNotes={nNotes}
             searching={searching} onSearch={() => { setSearching((v) => !v); setQ(""); }}
             menu={(close) => (<>
+              <button onClick={() => { close(); setFavRaw(toggleFavorite(favs, { id: contactId, name: name || formatPhone(phone) || "Contact" })); }} style={menuItem}>
+                {isFavorite(favs, contactId) ? "★ Remove from favorites" : "☆ Add to favorites"}</button>
               <Link href={cardHref} onClick={close} style={menuItem}>Contact details</Link>
               <button onClick={() => { close(); setNotesOpen(true); }} style={menuItem}>All notes{nNotes ? ` (${nNotes})` : ""}</button>
               <button onClick={() => { close(); askDustyBrief(); }} style={menuItem}>Where things stand</button>

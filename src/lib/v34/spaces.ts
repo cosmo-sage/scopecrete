@@ -61,7 +61,7 @@ export function monogram(name: string | null | undefined): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-export type SpaceRef = { kind: "home" } | { kind: "job"; id: string } | { kind: "customer"; id: string } | { kind: "vendor"; id: string } | { kind: "collection"; id: string };
+export type SpaceRef = { kind: "home" } | { kind: "job"; id: string } | { kind: "customer"; id: string } | { kind: "vendor"; id: string } | { kind: "collection"; id: string } | { kind: "threads" };
 
 /** Which Space a page belongs to: a job's, a customer's or a vendor's own pages are its Space, everything else Home. */
 export function spaceOf(path: string | null | undefined): SpaceRef {
@@ -72,7 +72,40 @@ export function spaceOf(path: string | null | undefined): SpaceRef {
   if (c) return { kind: "customer", id: c[1] };
   const v = /^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i.exec(p);
   if (v) return { kind: "vendor", id: v[1] };
+  if (/^\/dashboard\/messages\/new(?:\/|$)/.test(p)) return { kind: "threads" };
   return { kind: "home" };
+}
+
+/* ------------------------------------------------------------ the Threads Work Space */
+
+/**
+ * The Threads Work Space (Coy, 2026-10-24, after Discord's DMs): under Dusty on every rail, its
+ * drawer every thread by the latest call, text or email, a row of favorites across the top that
+ * scrolls sideways, and New message. Favorites are kept on the account (`thread_favorites`).
+ */
+export interface ThreadFavorite { id: string; name: string }
+export const MAX_FAVORITES = 30;
+export function cleanFavorites(v: unknown): ThreadFavorite[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: ThreadFavorite[] = [];
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const r = x as Record<string, unknown>;
+    const id = typeof r.id === "string" && UUID_RE.test(r.id) ? r.id : null;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 120) : "Contact" });
+    if (out.length >= MAX_FAVORITES) break;
+  }
+  return out;
+}
+export const isFavorite = (favs: ThreadFavorite[], id: string) => favs.some((f) => f.id === id);
+/** On if off, off if on; a new favorite goes at the front. Unchanged when the list is full. */
+export function toggleFavorite(favs: ThreadFavorite[], fav: ThreadFavorite): ThreadFavorite[] {
+  if (isFavorite(favs, fav.id)) return favs.filter((f) => f.id !== fav.id);
+  if (favs.length >= MAX_FAVORITES) return favs;
+  return [{ id: fav.id, name: fav.name.trim().slice(0, 120) || "Contact" }, ...favs];
 }
 
 /* ------------------------------------------------------------ customer and vendor Spaces */

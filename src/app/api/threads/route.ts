@@ -241,6 +241,27 @@ export async function GET(req: NextRequest) {
     if (seen) { seen.count += 1; seen.said ||= said; if (!seen.lastIn && inbound) seen.lastIn = inbound; }
     else byContact.set(key, { latest: r, count: 1, lastIn: inbound, said });
   }
+  // The Threads Work Space lists people by their latest call, text OR email (Coy, 2026-10-24):
+  // with ?email=1 a newer email filed on someone stands as their latest, subject as its words.
+  if (req.nextUrl.searchParams.get("email") === "1") {
+    const { data: mail } = await supabase.from("emails")
+      .select("id, contact_id, direction, subject, sent_at, created_at")
+      .eq("org_id", orgId).not("contact_id", "is", null)
+      .order("created_at", { ascending: false }).limit(800);
+    for (const e of (mail ?? []) as Array<{ id: string; contact_id: string; direction: string | null; subject: string | null; sent_at: string | null; created_at: string }>) {
+      const at = e.sent_at ?? e.created_at;
+      const out = e.direction === "out";
+      const row: MessageRow = { id: e.id, contact_id: e.contact_id, channel: "email", direction: out ? "outbound" : "inbound", occurred_at: at,
+        body_text: `Email: ${(e.subject ?? "").trim() || "(no subject)"}`, summary: null, summary_source: null, duration_seconds: null, from_address: null, to_address: null };
+      const seen = byContact.get(e.contact_id);
+      if (!seen) byContact.set(e.contact_id, { latest: row, count: 1, lastIn: out ? null : at, said: true });
+      else {
+        seen.count += 1;
+        if ((seen.latest.occurred_at ?? "") < at) seen.latest = row;
+        if (!out && (seen.lastIn ?? "") < at) seen.lastIn = at;
+      }
+    }
+  }
   // Archived (migration 066): out of the lists until they call or text again.
   const view = req.nextUrl.searchParams.get("view") === "archived" ? "archived" : "live";
   // A thread Coy made (migration 073): only its members — and members with no

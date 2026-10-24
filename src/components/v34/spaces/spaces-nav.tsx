@@ -32,7 +32,8 @@ import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import { usePref } from "@/lib/v34/prefs";
 import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 import { pickFilesFolder, useFilesFolders } from "@/lib/v34/files-folders";
-import { ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
+import { ROLE_LABEL, initialsHue, type ContactRole } from "@/lib/v34/threads";
+import { useLiveThreads } from "@/lib/v34/live-threads";
 import {
   activeTreeRow, contactThreads, jobTree, monogram, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, pickSections, COLLECTION_PAGES, offShelf,
@@ -42,6 +43,8 @@ import {
   type LayoutKind, type KindLayout, type TreeRow,
   type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type SpacePin,
   cleanRail, orderTiles, moveTile, hideTile, showTile, railItems, groupTiles, ungroupTile, placeKeys, renameGroup, dissolveGroup, newGroupId, type RailGroup, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
+  cleanFavorites, type ThreadFavorite,
+  shortWhen,
   collectionListAt, collectionRecordAt, collectionListRows, filterListRows, homeLooseGroups, COLLECTION_LIST_LABEL, type CollectionList, type ListRow,
 } from "@/lib/v34/spaces";
 
@@ -1547,6 +1550,100 @@ function ProposalIcon() {
   );
 }
 
+/* ------------------------------------------------------------ the Threads Work Space */
+
+const THREADS_C = "var(--sc-bucket-customer)";
+
+function ChatGlyph({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 4.5h13v8.5h-7l-4 3v-3h-2z" /><path d="M7 8.2h6M7 10.6h4" />
+    </svg>
+  );
+}
+
+interface ThreadRowData {
+  contact_id: string; display_name: string; preview: string | null; occurred_at: string | null;
+  direction: string | null; channel: string | null; bucket: string | null; company?: string | null;
+}
+
+/**
+ * The Threads Work Space's drawer (Coy, 2026-10-24, after Discord's DMs): New message at the top,
+ * favorites in a row that scrolls sideways, then every thread by its latest call, text or email.
+ */
+function ThreadsDrawer({ onPick }: { onPick: () => void }) {
+  const path = usePathname() ?? "";
+  const [favRaw] = usePref<unknown>("thread_favorites", []);
+  const favs = useMemo(() => cleanFavorites(favRaw), [favRaw]);
+  const [rows, setRows] = useState<ThreadRowData[] | null>(null);
+  const [q, setQ] = useState("");
+  const [tick, setTick] = useState(0);
+  useLiveThreads(() => setTick((n) => n + 1));
+  useEffect(() => {
+    let live = true;
+    fetch("/api/threads?email=1", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((j) => {
+      if (!live) return;
+      const list = ((j?.threads ?? []) as ThreadRowData[]).filter((t) => t.bucket !== "spam");
+      setRows(list);
+    }).catch(() => { if (live) setRows((r) => r ?? []); });
+    return () => { live = false; };
+  }, [tick]);
+  const open = /^\/dashboard\/messages\/([0-9a-f-]{36})/i.exec(path)?.[1] ?? null;
+  const needle = q.trim().toLowerCase();
+  const shown = (rows ?? []).filter((t) => !needle || `${t.display_name} ${t.company ?? ""} ${t.preview ?? ""}`.toLowerCase().includes(needle));
+  return (
+    <>
+      <SpaceHead name="Threads" kind="Threads" color={THREADS_C} icon={<ChatGlyph />}
+        sub={rows ? `${rows.length} ${rows.length === 1 ? "person" : "people"}` : undefined} />
+      <div className="sc-space-scroll">
+        <div style={{ padding: "8px 12px 4px" }}>
+          <Link href="/dashboard/messages/new" onClick={onPick} className="no-underline"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, borderRadius: 8, background: THREADS_C, color: "#fff", fontWeight: 600, fontSize: 13 }}>
+            <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>+</span> New message
+          </Link>
+        </div>
+        {favs.length > 0 && (
+          <div aria-label="Favorites" style={{ padding: "6px 0 2px" }}>
+            <div className="sc-space-row-s" style={{ padding: "0 12px 4px", textTransform: "uppercase", letterSpacing: ".06em", fontSize: 10 }}>Favorites</div>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", padding: "2px 12px 6px", scrollbarWidth: "none" }}>
+              {favs.map((f) => <FavChip key={f.id} fav={f} on={open === f.id} onPick={onPick} />)}
+            </div>
+          </div>
+        )}
+        <div style={{ padding: "4px 12px 6px" }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a thread" aria-label="Find a thread"
+            style={{ width: "100%", height: 30, borderRadius: 999, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, padding: "0 12px", fontSize: 13 }} />
+        </div>
+        {rows === null && <div className="sc-space-empty">Loading…</div>}
+        {rows !== null && shown.length === 0 && <div className="sc-space-empty">{needle ? "No thread matches that." : "No calls, texts or emails yet."}</div>}
+        {shown.slice(0, 200).map((t) => {
+          const hue = initialsHue(t.display_name) ?? T.ink3;
+          const lead = t.channel === "email" ? "" : t.direction === "outbound" ? "You: " : "";
+          return (
+            <Row key={t.contact_id} href={`/dashboard/messages/${t.contact_id}`} label={t.display_name}
+              sub={t.preview ? `${lead}${t.preview}` : t.company ?? undefined} when={shortWhen(t.occurred_at)}
+              avatar={monogram(t.display_name)} color={hue} on={open === t.contact_id} onPick={onPick} />
+          );
+        })}
+        {shown.length > 200 && <div className="sc-space-more">Type a name to find the rest.</div>}
+      </div>
+    </>
+  );
+}
+
+function FavChip({ fav, on, onPick }: { fav: ThreadFavorite; on: boolean; onPick: () => void }) {
+  const hue = initialsHue(fav.name) ?? T.ink3;
+  const first = fav.name.split(/\s+/)[0] ?? fav.name;
+  return (
+    <Link href={`/dashboard/messages/${fav.id}`} onClick={onPick} className="no-underline" title={fav.name} aria-current={on ? "page" : undefined}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, width: 52, flexShrink: 0 }}>
+      <span style={{ width: 42, height: 42, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14,
+        background: `color-mix(in srgb, ${hue} 20%, ${T.card})`, color: hue, boxShadow: on ? `0 0 0 2px ${THREADS_C}` : undefined }}>{monogram(fav.name)}</span>
+      <span style={{ fontSize: 11, color: T.ink2, maxWidth: 52, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{first}</span>
+    </Link>
+  );
+}
+
 function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
   shown: SpaceRef; pages: string[]; active: string; onOpen: () => void; bar?: React.ReactNode;
 }) {
@@ -1588,6 +1685,9 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
     const members = cleanMembers(memRaw)[shown.id] ?? [];
     chips = [chip("WS", "Work Space", "var(--sc-violet)"),
       ...members.map((m) => chip(monogram(m.name), m.name, m.kind === "job" ? "var(--sc-hiviz)" : m.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)"))];
+  } else if (shown.kind === "threads") {
+    icons = [icon("newmsg", "New message", "/dashboard/messages/new", path === "/dashboard/messages/new", <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>)];
+    chips = [chip("TH", "Threads", THREADS_C)];
   } else {
     const here = activeTreeRow(path, search);
     icons = jobTree(shown.id).filter((r) => !r.sub).map((r) => {
@@ -1918,12 +2018,17 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       },
     } : {}),
   }) as DragProps;
-  const shownKey = shown.kind === "home" ? "" : `${shown.kind === "collection" ? "col" : shown.kind}:${shown.id}`;
+  const shownKey = shown.kind === "home" ? "" : shown.kind === "threads" ? "threads" : `${shown.kind === "collection" ? "col" : shown.kind}:${shown.id}`;
 
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Work Spaces" onClickCapture={() => setList(null)}>
       <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home href={desktop ? "/dashboard/dusty" : undefined} onPick={() => { setPeek({ kind: "home" }); setStay(null); }}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
+      </Tile>
+      {/* Threads, under Dusty on every rail (Coy, 2026-10-24, after Discord's DMs). */}
+      <Tile label="Threads" title="Threads — every call, text and email" color={THREADS_C} on={shown.kind === "threads"}
+        onPick={() => { setList(null); setPeek({ kind: "threads" }); setStay({ kind: "threads" }); }}>
+        <span style={{ color: THREADS_C, display: "grid", placeItems: "center" }}><ChatGlyph size={24} /></span>
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />
       {rail === null && <span className="sc-spaces-note">…</span>}
@@ -1987,7 +2092,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   // it clear that a workspace is connected to the drawer under it").
   const spaceColor = shown.kind === "job" ? stageColor(jobOf(shown.id)?.status ?? "")
     : shown.kind === "customer" ? "var(--sc-chalk)" : shown.kind === "vendor" ? "var(--sc-bucket-vendor)"
-      : shown.kind === "collection" ? "var(--sc-violet)" : "var(--sc-hiviz)";
+      : shown.kind === "collection" ? "var(--sc-violet)" : shown.kind === "threads" ? THREADS_C : "var(--sc-hiviz)";
   const navStyle = { "--sc-space-c": spaceColor } as React.CSSProperties;
   const navRef = useTabGap();
   const drawerEl = desktop && folded ? <FoldedDrawer shown={shown} pages={pages} active={active} onOpen={onFold} bar={bar} /> : (
@@ -2010,6 +2115,8 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         ? <HomeDrawer pages={pages} active={active} onPick={picked(shown)} />
         : shown.kind === "job"
           ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={picked(shown)} rail={railFor("job", shown.id)} />
+          : shown.kind === "threads"
+          ? <ThreadsDrawer onPick={picked(shown)} />
           : shown.kind === "collection"
             ? <CollectionDrawer id={shown.id} col={(rail?.collections ?? []).find((c) => c.id === shown.id) ?? null} pages={pages} active={active}
                 onPick={picked(shown)} onDeleted={() => { setPeek({ kind: "home" }); setStay(null); }} />

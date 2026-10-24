@@ -23,6 +23,8 @@ import { EmptyState, MenuButton, SearchBubble } from "@/components/v34/primitive
 import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { setDustyUse } from "@/lib/v34/dusty-live";
+import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
@@ -213,7 +215,7 @@ function Tag({ color, children }: { color: string; children: React.ReactNode }) 
 
 // ── L3: one conversation ────────────────────────────────────────────────────
 
-interface FileLite { id: string; name: string; url?: string | null; mime_type?: string | null; byte_size?: number | null }
+export interface FileLite { id: string; name: string; url?: string | null; mime_type?: string | null; byte_size?: number | null }
 interface Msg extends MailRow { text_body: string | null; attachments: Array<{ id: string; name: string; fetch_state: string; fetch_error: string | null; file: FileLite | null }>; sent_files: FileLite[] }
 interface ConvData {
   conversation: ConvView;
@@ -797,12 +799,16 @@ function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open
   );
 }
 
-export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, initialSubject, draftFiles, onClose, onSent, asPage, quoted }: {
+export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, initialSubject, draftFiles, onClose, onSent, asPage, quoted, toName, initialFiles }: {
   mode: ComposeMode; draft?: DraftRow | null; messages?: MailRow[]; ours?: string[]; conversation?: string | null; replyToId?: string | null;
   filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; initialSubject?: string; draftFiles?: FileLite[];
   onClose: () => void; onSent: (msg: string, conversation?: string | null) => void; asPage?: boolean;
   /** The email being answered, shown under the box when the composer covers the screen (phone). */
   quoted?: React.ReactNode;
+  /** Who it is to, for Dusty's question when the emblem in the body is tapped. */
+  toName?: string | null;
+  /** Files to start with (a file picked from the thread's "/" menu). */
+  initialFiles?: FileLite[];
 }) {
   const phone = usePhone();
   const [showQuoted, setShowQuoted] = useState(true);
@@ -825,6 +831,7 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
       const known = new Map([...(draftFiles ?? []), ...messages.flatMap((m) => [...((m as Msg).sent_files ?? []), ...((m as Msg).attachments ?? []).map((a) => a.file).filter((f): f is FileLite => !!f)])].map((f) => [f.id, f]));
       return draft.file_ids.map((id) => known.get(id) ?? { id, name: "Attached file" });
     }
+    if (initialFiles?.length) return initialFiles.slice(0, 10);
     if (mode !== "forward" || !last) return [];
     return [...(last.attachments ?? []).map((a) => a.file).filter((f): f is FileLite => !!f), ...(last.sent_files ?? [])].slice(0, 10);
   });
@@ -855,6 +862,21 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
       setBody((cur) => (cur.trim() && mode !== "forward" ? `${b.body}\n\n${cur}` : mode === "forward" ? `${b.body}${cur}` : b.body));
       setNote(b.used ? `Dusty drew on ${b.used}. Check anything in [brackets] before you send.` : "Check anything in [brackets] before you send.");
     } catch (e) { setErr(errText(e)); } finally { setBusy(null); }
+  };
+  // The emblem at the top of the body (Coy, 2026-10-24: "a dusty emblem … at the top left of the
+  // text field in the email draft … if I click on the emblem dusty will help draft an email"):
+  // Dusty is asked with what is written so far, his chat opens over the page with this person in
+  // view, and "Use this" puts his boxed words in the body. Nothing is sent.
+  const askDustyHere = () => {
+    const parts = [
+      `Help me write this email${toName ? ` to ${toName}` : ""}${to.length ? ` (${to.join(", ")})` : ""}. Use what you know from our calls, texts, emails and their jobs. Keep it short and in my voice; anything you can't know goes in [brackets].`,
+      subject.trim() ? `Subject: ${subject.trim()}` : "",
+      body.trim() ? `What I have so far:\n${body.trim()}` : "",
+      `Give me only the body, no subject line and no signature.`,
+    ].filter(Boolean);
+    setDustyUse({ label: "in the email", apply: (text) => { const t = text.trim(); if (!t) return false; setBody(t); return true; } });
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `${parts.join("\n\n")}\n\n${USE_ASK}`, send: true } })), 250);
   };
   const payload = () => ({
     mode, conversation, reply_to_email_id: replyToId, to, cc: showCc ? cc : [], subject, body, file_ids: files.map((f) => f.id),
@@ -888,8 +910,15 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
       <AddressField label="To" list={to} onChange={setTo} />
       {showCc ? <AddressField label="Cc" list={cc} onChange={setCc} /> : <button onClick={() => setShowCc(true)} style={{ alignSelf: "flex-start", fontSize: 11.5, color: T.ink2, cursor: "pointer", background: "none" }}>+ Cc</button>}
       <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" aria-label="Subject" style={{ ...field, border: "none", borderBottom: `1px solid ${T.hairSoft}`, borderRadius: 0, padding: "0 2px", fontWeight: 600 }} />
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write it here" aria-label="Message" rows={asPage ? 14 : 9}
-        style={{ width: "100%", border: `1px solid ${T.hairSoft}`, borderRadius: 4, padding: 10, background: T.card, color: T.ink, fontSize: F.sm, lineHeight: 1.5, resize: "vertical" }} />
+      <div style={{ position: "relative" }}>
+        <button onClick={askDustyHere} aria-label="Ask Dusty to help write it" title="Ask Dusty to help write it"
+          style={{ position: "absolute", top: 6, left: 6, zIndex: 1, display: "flex", alignItems: "center", gap: 6, background: "none", cursor: "pointer", padding: 0 }}>
+          <DustyEmblem size={30} hidden />
+          <span style={{ fontSize: 11.5, color: T.ink3 }}>Dusty can write it</span>
+        </button>
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write it here" aria-label="Message" rows={asPage ? 14 : 9}
+          style={{ width: "100%", border: `1px solid ${T.hairSoft}`, borderRadius: 4, padding: "44px 10px 10px", background: T.card, color: T.ink, fontSize: F.sm, lineHeight: 1.5, resize: "vertical" }} />
+      </div>
       {signature && <div style={{ fontSize: 11.5, color: T.ink3, whiteSpace: "pre-line" }}>{signature}</div>}
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -1022,6 +1051,43 @@ export function NewEmail({ threadId, to, contactId, draftId, body, subject }: { 
         : <EmailComposer asPage mode="new" draft={ctx.draft} ours={ctx.ours} filing={ctx.filing} canSend={ctx.can_send} signature={ctx.signature}
             initialTo={ctx.to} initialBody={body ?? undefined} initialSubject={subject ?? undefined} draftFiles={ctx.draftFiles} onClose={() => router.push(back)}
             onSent={(_m, conv) => router.push(conv ? convHref(conv, threadId) : back)} />}
+    </div>
+  );
+}
+
+/**
+ * The email drafter inside a contact's thread (Coy, 2026-10-24: "I like the full page email drafter
+ * but I want it to sit under the thread header so I know where i'm at"). The one way to write a new
+ * email from a thread — "/" → Email draft, @email and the header's New email all open it — in place
+ * of the timeline, under the thread's header. × goes back to the timeline; Save draft keeps it.
+ */
+export function ThreadEmailDraft({ contactId, name, to, body, subject, files, onClose, onSent }: {
+  contactId: string; name?: string | null; to?: string | null; body?: string; subject?: string; files?: FileLite[];
+  onClose: () => void; onSent: (msg: string) => void;
+}) {
+  const [ctx, setCtx] = useState<{ can_send: boolean; signature: string; ours: string[]; draftFiles: FileLite[]; to: string[]; filing: Filing } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    (async () => {
+      const b = await call<{ can_send: boolean; inboxes: string[]; signature: string; draft_files: FileLite[]; to: string[]; filing: Filing }>(`/api/emails/compose?contact=${encodeURIComponent(contactId)}`);
+      const addr = to && isEmail(to) ? [to.toLowerCase()] : b.to;
+      if (!off) setCtx({ can_send: b.can_send, signature: b.signature, ours: b.inboxes, draftFiles: b.draft_files ?? [], to: addr, filing: { ...b.filing, filed: false } });
+    })().catch((e) => { if (!off) setErr(errText(e)); });
+    return () => { off = true; };
+  }, [contactId, to]);
+  return (
+    <div style={{ padding: "10px 14px 24px", background: T.card }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
+        <span style={{ ...eyebrow, color: T.hiviz }}>New email{name ? ` · to ${name}` : ""}</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={onClose} aria-label="Back to the thread" style={{ fontSize: 20, color: T.ink2, cursor: "pointer", background: "none", lineHeight: 1 }}>×</button>
+      </div>
+      {err ? <EmptyState tone="warn" title="Can't write email yet" detail={err} />
+        : !ctx ? <div className="rounded animate-pulse" style={{ height: 240, background: T.hairSoft }} />
+        : <EmailComposer asPage mode="new" ours={ctx.ours} filing={ctx.filing} canSend={ctx.can_send} signature={ctx.signature} toName={name}
+            initialTo={ctx.to} initialBody={body} initialSubject={subject} initialFiles={files} draftFiles={ctx.draftFiles}
+            onClose={onClose} onSent={(m) => onSent(m)} />}
     </div>
   );
 }

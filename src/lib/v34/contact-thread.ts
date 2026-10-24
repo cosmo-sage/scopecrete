@@ -17,10 +17,10 @@ export const READ_SIZES = [
 ] as const;
 
 export const READ_FONTS = [
-  { key: "plex", label: "Plex", css: "'IBM Plex Sans', system-ui, sans-serif" },
-  { key: "clear", label: "Clear", css: "'Atkinson Hyperlegible', system-ui, sans-serif" },
-  { key: "round", label: "Round", css: "'Lexend', system-ui, sans-serif" },
-  { key: "serif", label: "Serif", css: "'Source Serif 4', Georgia, serif" },
+  { key: "plex", label: "Standard", css: "var(--rf-plex), 'IBM Plex Sans', system-ui, sans-serif" },
+  { key: "clear", label: "Clear", css: "var(--rf-clear), 'Atkinson Hyperlegible', system-ui, sans-serif" },
+  { key: "serif", label: "Serif", css: "var(--rf-serif), 'Source Serif 4', Georgia, serif" },
+  { key: "mono", label: "Typewriter", css: "var(--rf-mono), 'JetBrains Mono', ui-monospace, monospace" },
 ] as const;
 
 const mix = (v: string, pct: number) => `color-mix(in srgb, var(${v}) ${pct}%, transparent)`;

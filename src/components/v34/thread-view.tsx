@@ -8,9 +8,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown } from "@phosphor-icons/react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
-import { Composer } from "@/components/v34/composer";
+import { Composer, type EmailSeed } from "@/components/v34/composer";
+import { ThreadEmailDraft } from "@/components/v34/email-client";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage, type ThreadEmail } from "@/components/v34/conversation";
 import { ContactThreadHead, FilterBar, SearchPill, useReading, useSpacesNav } from "@/components/v34/contact-thread-head";
+import { READ_FONT_VARS } from "@/components/v34/read-fonts";
 import { scoped, readSize, readFont, readBg, type CtFilter } from "@/lib/v34/contact-thread";
 import { SamePerson, type Person } from "@/components/v34/person-view";
 import { ContactCard } from "@/components/v34/contact-card";
@@ -88,6 +90,8 @@ export function ThreadView({ contactId, embedded = false }: {
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
+  // The one email drafter, under the header (Coy, 2026-10-24): opened by "/" → Email draft, @email or New email.
+  const [drafting, setDrafting] = useState<EmailSeed | null>(null);
   const moreRef = useDismiss(more, () => setMore(false));
   // The conversation's text size, like Dusty's chat (Coy, 2026-10-09), saved to the account.
   const [sizeKey, setSizeKey] = usePref<string>("thread_font", "m");
@@ -333,7 +337,7 @@ export function ThreadView({ contactId, embedded = false }: {
     const who = name ?? formatPhone(phone);
     const textTo = phoneTabs.find((p) => p.key === channelKey)?.value ?? phone;
     const action = ctFilter === "email"
-      ? <Link href={newEmailHref} style={{ ...pill, borderRadius: 999, background: T.chalk, color: "#fff", border: "none" }}><Envelope size={13} /> New email</Link>
+      ? <button onClick={() => setDrafting({})} style={{ ...pill, borderRadius: 999, background: T.chalk, color: "#fff", border: "none" }}><Envelope size={13} /> New email</button>
       : textTo ? <a href={`tel:${textTo}`} style={{ ...pill, borderRadius: 999, background: T.green, color: "#fff", border: "none" }}><Phone size={13} weight="fill" /> Call</a> : null;
     const menuItem: React.CSSProperties = { padding: "8px 12px", textAlign: "left", fontSize: F.sm, color: T.ink, background: "transparent", border: "none", display: "block", width: "100%" };
     return (
@@ -341,7 +345,7 @@ export function ThreadView({ contactId, embedded = false }: {
         <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
           <ContactThreadHead name={name} phone={phone} loading={loading} cardHref={cardHref}
             org={crumbOrg && crumbOrg.label !== name ? { href: crumbOrg.href, label: crumbOrg.label, kind: crumbOrg.kind } : null}
-            phones={phonesList} emails={emailList} newEmailHref={newEmailHref}
+            phones={phonesList} emails={emailList} newEmailHref={newEmailHref} onNewEmail={() => setDrafting({})}
             filter={ctFilter} onFilter={(f) => { setCtFilter(f); setNotesOpen(false); }}
             notesOpen={notesOpen} onNotes={() => setNotesOpen((v) => !v)} nNotes={nNotes}
             searching={searching} onSearch={() => { setSearching((v) => !v); setQ(""); }}
@@ -365,6 +369,13 @@ export function ThreadView({ contactId, embedded = false }: {
               {!openJob && <button onClick={() => { close(); void newScope(); }} disabled={starting || jobs === null} style={menuItem}>{starting ? "Starting…" : "New scope"}</button>}
               <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>
             </>)} />
+          {drafting ? (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <ThreadEmailDraft contactId={contactId} name={name} to={drafting.to ?? emailList[0] ?? null}
+                body={drafting.body} subject={drafting.subject} files={drafting.files}
+                onClose={() => setDrafting(null)} onSent={() => { setDrafting(null); setCtFilter("all"); setReload((n) => n + 1); }} />
+            </div>
+          ) : (<>
           {searching && <SearchPill filter={ctFilter} q={q} onQ={setQ} count={view.count} onDone={() => { setSearching(false); setQ(""); }} />}
           {!notesOpen && (
             <FilterBar filter={ctFilter} count={view.count}
@@ -381,14 +392,14 @@ export function ThreadView({ contactId, embedded = false }: {
           )}
           {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
           {!loading && !error && notesOpen ? (
-            <div className="flex-1 min-h-0" style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css }}>
+            <div className={`flex-1 min-h-0 ${READ_FONT_VARS}`} style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css }}>
               <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)}
                 merges={merges.map((m) => ({ id: m.id, label: `${m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread`, at: m.merged_at }))}
                 onUndoMerge={(id) => void undo(id)} undoing={undoing} />
             </div>
           ) : (
             <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px", background: readBg(reading).css }}>
-              <div style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css, lineHeight: 1.5 }}>
+              <div className={READ_FONT_VARS} style={{ zoom: readSize(reading).z, fontFamily: readFont(reading).css, lineHeight: 1.5 }}>
                 {loading ? (
                   <div className="space-y-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />)}</div>
                 ) : error ? (
@@ -412,8 +423,10 @@ export function ThreadView({ contactId, embedded = false }: {
           {!loading && !error && !notesOpen && (
             <Composer contactId={contactId} phone={textTo} name={name}
               only={ctFilter === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} onSent={() => setReload((n) => n + 1)}
+              onEmail={(seed) => setDrafting(seed)} onNote={() => setNotesOpen(true)}
               fromLine={sendLines.length > 1 ? { lines: sendLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
           )}
+          </>)}
         </div>
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}

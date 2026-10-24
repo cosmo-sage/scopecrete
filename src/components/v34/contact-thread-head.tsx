@@ -1,6 +1,7 @@
 "use client";
 
 import { useDismiss } from "@/lib/v34/use-dismiss";
+import { READ_FONT_VARS } from "@/components/v34/read-fonts";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Phone, Envelope, NotePencil, Funnel, MagnifyingGlass, X } from "@phosphor-icons/react";
@@ -83,6 +84,8 @@ export interface HeadProps {
   phones: Array<{ value: string; label: string }>;
   emails: string[];
   newEmailHref: string;
+  /** Opens the one email drafter under this header; without it New email is a link to the email page. */
+  onNewEmail?: () => void;
   filter: CtFilter;
   onFilter: (f: CtFilter) => void;
   notesOpen: boolean;
@@ -164,7 +167,9 @@ export function ContactThreadHead(p: HeadProps) {
           {open === "email" && (
             <Popover onClose={close}>
               <div className="flex items-center gap-1">
-                <Link href={p.newEmailHref} onClick={close} className="flex-1" style={pillAction}><Envelope size={14} color={T.chalk} />New email</Link>
+                {p.onNewEmail
+                  ? <button onClick={() => { close(); p.onNewEmail?.(); }} className="flex-1" style={{ ...pillAction, background: "none", border: "none", cursor: "pointer" }}><Envelope size={14} color={T.chalk} />New email</button>
+                  : <Link href={p.newEmailHref} onClick={close} className="flex-1" style={pillAction}><Envelope size={14} color={T.chalk} />New email</Link>}
                 <span aria-hidden style={{ width: 1, alignSelf: "stretch", background: T.hair, margin: "6px 2px" }} />
                 {funnel("email")}
               </div>
@@ -193,7 +198,7 @@ export function ContactThreadHead(p: HeadProps) {
                 ))}
               </div>
               <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Font</span>
-              <div className="grid grid-cols-2 gap-1 px-3 pt-1" role="radiogroup" aria-label="Font">
+              <div className={`grid grid-cols-2 gap-1 px-3 pt-1 ${READ_FONT_VARS}`} role="radiogroup" aria-label="Font">
                 {READ_FONTS.map((f) => (
                   <button key={f.key} role="radio" aria-checked={reading.font === f.key} onClick={() => setReading({ font: f.key })}
                     style={{ ...seg(reading.font === f.key), fontFamily: f.css, fontSize: 13.5 }}>{f.label}</button>

@@ -47,7 +47,10 @@ import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
 import { draftKey, proposalLink } from "@/lib/v34/send-proposal";
 import { sendBytes } from "@/components/v34/files-panel";
-import { AddressField } from "@/components/v34/email-client";
+import { AddressField, type FileLite } from "@/components/v34/email-client";
+import { slashBlocks, withoutSlash, type SlashKey } from "@/lib/v34/slash-blocks";
+import { setDustyUse } from "@/lib/v34/dusty-live";
+import { USE_ASK } from "@/lib/dusty/use-block";
 import { atEmail } from "@/lib/email-mention";
 
 type Channel = "text" | "email" | "note";
@@ -103,12 +106,15 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/** What the one email drafter opens with, from "/" → Email draft, a picked file, or @email. */
+export interface EmailSeed { to?: string | null; body?: string; subject?: string; files?: FileLite[] }
+
 interface SlashProposal {
   job_id: string; job_title: string | null; number: string; version: number; status: "draft" | "final"; total: number | null;
   link: { id: string; url: string; token: string; views: string } | null;
 }
 
-export function Composer({ contactId, phone, name, compact = false, onNoteSaved, onSent, only, fromLine }: {
+export function Composer({ contactId, phone, name, compact = false, onNoteSaved, onSent, only, fromLine, onEmail, onNote }: {
   contactId: string;
   /** E.164, for the Call link. */
   phone: string | null;
@@ -128,6 +134,13 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
    * org has two or more. Send uses it; Copy is still there for the Quo app.
    */
   fromLine?: { lines: Array<{ id: string; name: string; color: string; provider: string | null }>; value: string | null; onPick: (id: string) => void } | null;
+  /**
+   * The page's one email drafter (Coy, 2026-10-24: "consolidate into one outcome"). Given, "/" → Email
+   * draft and @email open it with the words typed; without it @email is the inline draft as before.
+   */
+  onEmail?: (seed: EmailSeed) => void;
+  /** "/" → Internal note when the page keeps notes apart (the thread's Notes); else the box turns to a note. */
+  onNote?: () => void;
 }) {
   // Lazy init reads the saved draft once, on mount. No effect needed, so no
   // setState inside one.
@@ -166,6 +179,63 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const linked = useRef<Set<string>>(new Set());
   const slash = channel !== "note" ? /(?:^|\s)\/([\w-]*)$/.exec(text) : null;
   const slashOpen = !!slash && slashOff !== text;
+  // "/" lists blocks first (Claude Design "Contact Thread"); Proposal and the files open their own list.
+  const [slashView, setSlashView] = useState<"blocks" | "proposal" | "files">("blocks");
+  const [slashSel, setSlashSel] = useState(0);
+  const [theirFiles, setTheirFiles] = useState<Array<FileLite & { kind?: string | null }> | null>(null);
+  const [filesKind, setFilesKind] = useState<"document" | "file">("file");
+  const blocks = slashBlocks(slash?.[1] ?? "");
+  // Closing the menu sends it back to the blocks list (set while rendering, not in an effect).
+  const [slashWas, setSlashWas] = useState(slashOpen);
+  if (slashWas !== slashOpen) { setSlashWas(slashOpen); if (!slashOpen) { setSlashView("blocks"); setSlashSel(0); } }
+  useEffect(() => {
+    if (slashView !== "files" || theirFiles) return;
+    let off = false;
+    fetch(`/api/files/search?contact=${contactId}`).then((r) => r.json()).then((b) => {
+      if (!off) setTheirFiles(((b.files ?? []) as Array<FileLite & { kind?: string | null }>).slice(0, 60));
+    }).catch(() => { if (!off) setTheirFiles([]); });
+    return () => { off = true; };
+  }, [slashView, theirFiles, contactId]);
+  const shownFiles = (theirFiles ?? []).filter((f) => filesKind === "file" || f.kind !== "image");
+  function openEmail(seed: EmailSeed) {
+    const words = withoutSlash(text);
+    if (onEmail) { setText(""); onEmail({ body: words || undefined, ...seed }); return; }
+    setText(words);
+    setMail((m) => m ?? { to: [], cc: [], subject: seed.subject ?? "", showCc: false });
+  }
+  function askDustyDraft() {
+    const words = withoutSlash(text);
+    setText(words);
+    setDustyUse({ label: "in the text box", apply: (t) => { const v = t.trim(); if (!v) return false; setText(v); return true; } });
+    const q = `Write my next text to ${name ?? "them"} from this thread — what they last said and what we owe them. Short, in my voice.`
+      + (words ? ` Start from what I have so far: "${words}".` : "") + ` Give me only the text.\n\n${USE_ASK}`;
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
+  }
+  function pickBlock(k: SlashKey) {
+    if (k === "email") openEmail({});
+    else if (k === "proposal") setSlashView("proposal");
+    else if (k === "document" || k === "file") { setFilesKind(k); setSlashView("files"); }
+    else if (k === "note") { setText(withoutSlash(text)); if (onNote) onNote(); else setChannel("note"); }
+    else if (k === "dusty") askDustyDraft();
+  }
+  function slashKey(e: React.KeyboardEvent): boolean {
+    if (!slashOpen) return false;
+    if (e.key === "Escape") { e.preventDefault(); if (slashView !== "blocks") setSlashView("blocks"); else setSlashOff(text); return true; }
+    if (slashView !== "blocks" || !blocks.length) return false;
+    const live = blocks.map((b, i) => (b.soon ? -1 : i)).filter((i) => i >= 0);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const at = live.indexOf(slashSel);
+      const next = e.key === "ArrowDown" ? live[(at + 1) % live.length] : live[(at - 1 + live.length) % live.length];
+      setSlashSel(next ?? 0); return true;
+    }
+    if (e.key === "Enter" && !(e.ctrlKey || e.metaKey)) {
+      const b = blocks[slashSel] ?? blocks.find((x) => !x.soon);
+      if (b && !b.soon) { e.preventDefault(); pickBlock(b.key); return true; }
+    }
+    return false;
+  }
   useEffect(() => {
     if (!slashOpen || finals) return;
     let off = false;
@@ -206,7 +276,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   }, [mail, mailInfo, contactId]);
   function onType(v: string) {
     const rest = channel !== "note" ? atEmail(v) : null;
-    if (rest === null) { setText(v); return; }
+    if (rest === null) { setText(v); setSlashSel(0); return; }
+    if (onEmail) { setText(""); onEmail({ body: rest.trim() || undefined }); return; }
     setText(rest);
     setMail((m) => m ?? { to: [], cc: [], subject: "", showCc: false });
     setMailConfirm(false); setMailMsg(null);
@@ -409,13 +480,40 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       )}
 
       {slashOpen && (
-        <div role="listbox" aria-label="Put a proposal's link in" className="rounded-lg mb-1.5"
-          style={{ border: `1px solid ${T.hair}`, background: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 220, overflowY: "auto" }}>
-          <div className="flex items-center px-2.5 py-1.5" style={{ ...eyebrow, fontSize: 9, color: T.ink3, borderBottom: `1px solid ${T.hairSoft}` }}>
-            <span className="flex-1">Put a proposal&apos;s link in</span>
+        <div role="listbox" aria-label="Insert a block" className="rounded-lg mb-1.5"
+          style={{ border: `1px solid ${T.hair}`, background: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 300, overflowY: "auto" }}>
+          <div className="flex items-center gap-2 px-2.5 py-1.5" style={{ ...eyebrow, fontSize: 9, color: T.ink3, borderBottom: `1px solid ${T.hairSoft}` }}>
+            {slashView !== "blocks" && <button type="button" onClick={() => setSlashView("blocks")} aria-label="Back to the blocks"
+              style={{ border: 0, background: "transparent", color: T.ink2, cursor: "pointer", fontSize: 13 }}>‹</button>}
+            <span className="flex-1">{slashView === "proposal" ? "Put a proposal's link in" : slashView === "files" ? (filesKind === "document" ? "A document — attached to an email" : "A photo or file — attached to an email") : "Insert a block"}</span>
+            {slashView === "blocks" && <span className="hidden md:inline" style={{ textTransform: "none", letterSpacing: 0 }}>↑↓ move · Enter picks · Esc closes</span>}
             <button type="button" onClick={() => setSlashOff(text)} aria-label="Close" style={{ border: 0, background: "transparent", color: T.ink3, cursor: "pointer", fontSize: 13 }}>×</button>
           </div>
-          {finals === null ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>Looking…</div>
+          {slashView === "blocks" ? (
+            blocks.length === 0 ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>No block by that name — keep typing, or Esc.</div>
+            : blocks.map((b, i) => (
+              <button key={b.key} type="button" role="option" aria-selected={i === slashSel} disabled={b.soon}
+                onMouseEnter={() => !b.soon && setSlashSel(i)} onClick={() => pickBlock(b.key)}
+                className="w-full text-left px-2.5 py-1.5 flex items-center gap-2"
+                style={{ border: 0, borderBottom: `1px solid ${T.hairSoft}`, background: i === slashSel && !b.soon ? T.hivizDim : "transparent", cursor: b.soon ? "default" : "pointer", opacity: b.soon ? 0.5 : 1 }}>
+                <span className="min-w-0 flex-1">
+                  <span style={{ display: "block", fontSize: F.sm, color: T.ink, fontWeight: 600 }}>{b.label}</span>
+                  <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>{b.hint}</span>
+                </span>
+                {b.more && <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>}
+              </button>
+            ))
+          ) : slashView === "files" ? (
+            theirFiles === null ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>Looking…</div>
+            : shownFiles.length === 0 ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>Nothing on their Files yet.</div>
+            : shownFiles.map((f) => (
+              <button key={f.id} type="button" role="option" aria-selected={false} onClick={() => openEmail({ files: [f] })}
+                className="w-full text-left px-2.5 py-1.5" style={{ border: 0, borderBottom: `1px solid ${T.hairSoft}`, background: "transparent", cursor: "pointer", display: "block" }}>
+                <div style={{ fontSize: F.sm, color: T.ink, ...clip }}>{f.name}</div>
+              </button>
+            ))
+          ) : (
+            finals === null ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>Looking…</div>
             : slashList.length === 0 ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>No final proposal on their jobs yet — open the proposal and Preview it to make one.</div>
             : slashList.map((x) => (
               <button key={x.job_id} type="button" role="option" aria-selected={false} disabled={slashBusy} onClick={() => void insertProposal(x)}
@@ -423,7 +521,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
                 <div style={{ fontSize: F.sm, color: T.ink, ...clip }}>{x.number} · {x.job_title ?? "Untitled job"}</div>
                 <div style={{ fontSize: F.xs, color: T.ink3 }}>v{x.version}{x.total != null ? ` · $${Math.round(x.total).toLocaleString()}` : ""}{x.link ? ` · ${x.link.views}` : " · makes its link"}</div>
               </button>
-            ))}
+            ))
+          )}
         </div>
       )}
       {attached.length > 0 && (
@@ -467,6 +566,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
             aria-label={mail ? "Email body" : channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
             onKeyDown={(e) => {
+              if (slashKey(e)) return;
               if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
               e.preventDefault();
               send.current?.click();

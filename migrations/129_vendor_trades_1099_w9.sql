@@ -30,6 +30,8 @@ create index if not exists org_vendor_trades_org on public.org_vendor_trades (or
 alter table public.org_vendor_trades enable row level security;
 revoke all on public.org_vendor_trades from anon;
 grant select, insert, update, delete on public.org_vendor_trades to authenticated;
+-- Supabase's default grants also give truncate (which skips RLS), references and trigger.
+revoke truncate, references, trigger on public.org_vendor_trades from authenticated;
 create policy org_vendor_trades_member on public.org_vendor_trades for all to authenticated
   using (org_id = any (get_user_org_ids())) with check (org_id = any (get_user_org_ids()));
 

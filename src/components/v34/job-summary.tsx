@@ -27,6 +27,7 @@ import { ProposalOpenings } from "@/components/v34/proposal/openings";
 import { dayLabel, todayCentral, validDay, whenLabel } from "@/lib/jobs/schedule";
 import { JobBids } from "@/components/v34/bids/job-bids";
 import { SpecsCard } from "@/components/v34/specs-card";
+import { CameraLinkCard } from "@/components/v34/camera/camera-link-card";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
@@ -203,6 +204,10 @@ export function JobSummary({ jobId }: { jobId: string }) {
 
         {/* The spec book's concrete pages as one file Dusty can read (2026-10-12). */}
         <SpecsCard jobId={jobId} card={card} />
+
+        {/* A camera link texted to the customer — their photos and video land in Files (migration 128). */}
+        <CameraLinkCard jobId={jobId} jobTitle={realTitle || null} people={people.filter((p) => p.on_job !== false)}
+          sections={sections ?? []} card={card} />
 
         <FromThePlans jobId={jobId} sections={sections} />
       </div>

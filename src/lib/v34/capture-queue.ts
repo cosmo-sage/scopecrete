@@ -32,6 +32,9 @@ export interface Shot {
   next_at: number;
   file_id: string | null;
   created: number;
+  /** A customer's camera link (migration 128): sent as anon to the link's own folder, then
+   *  recorded through /api/cam/<token>, instead of /api/capture/files. */
+  link?: { token: string; folder: string } | null;
 }
 
 const DB = "sc-capture", STORE = "shots";
@@ -64,13 +67,14 @@ async function emit() {
   try { last = (await all()).sort((a, b) => b.created - a.created); } catch { /* storage closed */ }
   listeners.forEach((l) => l(last));
 }
-/** Shots on this phone, newest first, as they change. */
-export function watchShots(l: (shots: Shot[]) => void): () => void {
-  listeners.add(l);
-  l(last);
+/** Shots on this phone, newest first, as they change — the Camera page's, or one camera link's. */
+export function watchShots(l: (shots: Shot[]) => void, link: string | null = null): () => void {
+  const mine = (all: Shot[]) => l(all.filter((s) => (s.link?.token ?? null) === link));
+  listeners.add(mine);
+  mine(last);
   void emit();
   start();
-  return () => { listeners.delete(l); };
+  return () => { listeners.delete(mine); };
 }
 
 /** Keep a shot and start sending it. */
@@ -103,9 +107,39 @@ async function sendTo(signedUrl: string, blob: Blob, name: string) {
   if (!r.ok) throw new Error(`upload failed (${r.status})`);
 }
 
+/** One file to storage as anon (the anon key as bearer, so a signed-in session never stands in).
+ *  A retry that finds it already there counts as sent. */
+async function sendAnon(path: string, blob: Blob) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "", key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const r = await fetch(`${base}/storage/v1/object/job-files/${path.split("/").map(encodeURIComponent).join("/")}`, {
+    method: "POST", body: blob,
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": blob.type || "application/octet-stream", "x-upsert": "false" },
+  });
+  if (r.ok) return;
+  const t = await r.text().catch(() => "");
+  if (r.status === 409 || /duplicate|already exists/i.test(t)) return;
+  throw Object.assign(new Error(r.status === 413 ? "too big to send" : r.status === 403 ? "the link is turned off or full for today" : `upload failed (${r.status})`), { final: r.status === 413 });
+}
+
+async function sendLinked(s: Shot, link: { token: string; folder: string }): Promise<void> {
+  const ext = s.mime === "video/webm" ? "webm" : s.mime === "video/quicktime" ? "mov" : s.mime === "video/mp4" ? "mp4" : s.mime === "image/png" ? "png" : "jpg";
+  const path = `${link.folder}/${s.client_id}.${ext}`;
+  if (s.blob) await sendAnon(path, s.blob);
+  const thumb = s.thumb ? `${path}.thumb.jpg` : null;
+  // The thumbnail is a nicety; a refusal never holds the shot back.
+  const thumbOk = thumb && s.thumb ? await sendAnon(thumb, s.thumb).then(() => true, () => false) : false;
+  const r = await call(`/api/cam/${encodeURIComponent(link.token)}`, { client_id: s.client_id, path, thumb: thumbOk ? thumb : null, taken_at: s.taken_at, note: s.note });
+  if (!r.ok) {
+    if (r.b.waiting) { await put({ ...s, state: "held", error: String(r.b.error ?? "Waiting"), next_at: Date.now() + 5 * 60_000 }); return; }
+    throw Object.assign(new Error(String(r.b.error ?? `HTTP ${r.status}`)), { final: r.b.final === true });
+  }
+  await put({ ...s, blob: null, state: "done", error: null, file_id: String(r.b.id ?? "") || null });
+}
+
 async function sendOne(s: Shot): Promise<void> {
   await put({ ...s, state: "sending", error: null });
   await emit();
+  if (s.link) return sendLinked(s, s.link);
   const r = await call("/api/capture/files", {
     client_id: s.client_id, mime: s.mime, size: s.blob?.size ?? 0, thumb_size: s.thumb?.size ?? null, taken_at: s.taken_at,
     lat: s.lat, lng: s.lng, accuracy: s.accuracy, job_id: s.job_id, section_id: s.section_id, site_id: s.site_id, tag: s.tag, note: s.note,

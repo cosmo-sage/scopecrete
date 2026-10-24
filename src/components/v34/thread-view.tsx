@@ -310,12 +310,16 @@ export function ThreadView({ contactId, embedded = false }: {
   const liveHere = channel?.kind === "phone" ? liveCallFor(liveCalls, contactId, channel.value) : null;
   const liveAny = liveHere ?? liveCallFor(liveCalls, contactId) ?? channels.map((x) => x.kind === "phone" ? liveCallFor(liveCalls, contactId, x.value) : null).find(Boolean) ?? null;
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };
-  // The lines this person actually reached on this number, and the one a text or call goes from:
-  // the line they last used, else the primary.
+  // The lines a text or call can go from, and the one it does: the connected line they last used,
+  // else the primary.
+  // Only lines connected to ScopeCrete (Quo, in Settings → Lines) can call or text from here; a line
+  // listed with no provider, like a personal cell, still stamps its old messages but is never offered
+  // (Coy, 2026-10-24: "Personal cell shouldn't be an option to text or call from").
+  const sendLines = orgLines.filter((l) => l.provider === "quo");
   const usedLines = orgLines.filter((l) => n.some((m) => m.line_id === l.id));
-  const lastLine = [...n].reverse().find((m) => m.line_id)?.line_id ?? null;
-  const defaultLine = lastLine ?? orgLines.find((l) => l.is_primary)?.id ?? orgLines[0]?.id ?? null;
-  const outLine = orgLines.find((l) => l.id === (fromLine ?? defaultLine)) ?? null;
+  const lastLine = [...n].reverse().find((m) => m.line_id && sendLines.some((l) => l.id === m.line_id))?.line_id ?? null;
+  const defaultLine = lastLine ?? sendLines.find((l) => l.is_primary)?.id ?? sendLines[0]?.id ?? null;
+  const outLine = sendLines.find((l) => l.id === (fromLine ?? defaultLine)) ?? null;
   const pill: React.CSSProperties = { height: 28, padding: "0 10px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 6,
     border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" };
   const seg = (on: boolean): React.CSSProperties => ({ height: "100%", padding: "0 10px", border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
@@ -347,11 +351,11 @@ export function ThreadView({ contactId, embedded = false }: {
               <button onClick={() => { close(); askDustyBrief(); }} style={menuItem}>Where things stand</button>
               {pageLink.label !== "Contact" && <Link href={pageLink.href} onClick={close} style={menuItem}>{pageLink.label} ›</Link>}
               <button onClick={() => { close(); setFiling(true); }} style={menuItem}>Move thread</button>
-              {orgLines.length > 1 && outLine && (
+              {sendLines.length > 1 && outLine && (
                 // Which of your lines a call or text goes from — in ⋯, not under the text box (Coy, 2026-10-24).
                 <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "6px 0" }}>
                   <span style={{ ...eyebrow, fontSize: 11, color: T.ink3, padding: "0 12px" }}>Call or text from</span>
-                  {orgLines.map((l) => (
+                  {sendLines.map((l) => (
                     <button key={l.id} onClick={() => { close(); setFromLine(l.id); }} style={{ ...menuItem, fontWeight: l.id === outLine.id ? 600 : 400 }}>
                       {l.name}{l.id === outLine.id ? " ✓" : ""}
                     </button>
@@ -408,7 +412,7 @@ export function ThreadView({ contactId, embedded = false }: {
           {!loading && !error && !notesOpen && (
             <Composer contactId={contactId} phone={textTo} name={name}
               only={ctFilter === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} onSent={() => setReload((n) => n + 1)}
-              fromLine={orgLines.length > 1 ? { lines: orgLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
+              fromLine={sendLines.length > 1 ? { lines: sendLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
           )}
         </div>
         {merging && (
@@ -517,11 +521,11 @@ export function ThreadView({ contactId, embedded = false }: {
                   <Link href={editHref} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>Edit contact</Link>
                   {pageLink.label !== "Contact" && !embedded && <Link href={pageLink.href} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>{pageLink.label} ›</Link>}
                   <button onClick={() => { setMore(false); setFiling(true); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Move thread</button>
-                  {channel?.kind === "phone" && channel.value && orgLines.length > 1 && outLine && (
+                  {channel?.kind === "phone" && channel.value && sendLines.length > 1 && outLine && (
                     // Which of your lines a call or text goes from — here on a phone, in the toolbar on a desktop (Coy, 2026-10-09).
                     <div className="lg:hidden flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "6px 0" }}>
                       <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Call or text from</span>
-                      {orgLines.map((l) => (
+                      {sendLines.map((l) => (
                         <button key={l.id} onClick={() => { setFromLine(l.id); setMore(false); }} className="px-3 py-1.5 text-left flex items-center gap-2"
                           style={{ fontSize: F.sm, color: T.ink, fontWeight: l.id === outLine.id ? 600 : 400 }}>
                           <span style={{ width: 7, height: 7, borderRadius: 7, background: l.color, display: "inline-block" }} />
@@ -676,7 +680,7 @@ export function ThreadView({ contactId, embedded = false }: {
             </div>
           )}
           <span className="flex-1" />
-          {channel?.kind === "phone" && channel.value && orgLines.length > 1 && outLine ? (
+          {channel?.kind === "phone" && channel.value && sendLines.length > 1 && outLine ? (
             // Call from ▾ (Lines, package 9): your phone places the call — pick the same line in Quo.
             <span className="inline-flex items-center shrink-0" style={{ ...pill, padding: 0, overflow: "hidden" }}>
               <a href={`tel:${channel.value}`} className="inline-flex items-center gap-1.5 no-underline" style={{ padding: "0 8px", color: "inherit", height: "100%" }}
@@ -688,7 +692,7 @@ export function ThreadView({ contactId, embedded = false }: {
                 <span style={{ width: 7, height: 7, borderRadius: 7, background: outLine.color, display: "inline-block" }} />
                 <select value={outLine.id} onChange={(e) => setFromLine(e.target.value)} aria-label="Call or text from line"
                   style={{ border: "none", background: "transparent", fontWeight: 600, fontSize: 12, color: T.ink, maxWidth: 76 }}>
-                  {orgLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {sendLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </label>
             </span>
@@ -796,7 +800,7 @@ export function ThreadView({ contactId, embedded = false }: {
         {!loading && !error && channel?.kind !== "chat" && channel?.kind !== "notes" && (
           <Composer contactId={contactId} phone={channel?.kind === "phone" ? channel.value : phone} name={name}
             only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} onSent={() => setReload((n) => n + 1)}
-            fromLine={orgLines.length > 1 ? { lines: orgLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
+            fromLine={sendLines.length > 1 ? { lines: sendLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
         )}
       </div>
 
